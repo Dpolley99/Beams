@@ -54,4 +54,13 @@ beam.solve()
 print(f"\nReaction at support A: {r_a:.2f} N")
 print(f"Reaction at support B: {r_b:.2f} N")
 
-plot_beam_results(beam, r_a, r_b)
+print("\n=== Key points (supports, loads, moment extrema) ===")
+for row in beam.key_points_report():
+    v = row['V_left'] if abs(row['V_left'] - row['V_right']) < 1e-6 \
+        else f"{row['V_left']:.0f} -> {row['V_right']:.0f}"
+    print(f"  x={row['x']:>6.2f} m | V={v} N | M={row['M']:>9.2f} N.m | {', '.join(row['labels'])}")
+
+max_row = beam.max_moment_point()
+print(f"\nGoverning section (max |M|): x={max_row['x']:.2f} m, M={max_row['M']:.2f} N.m")
+
+plot_beam_results(beam)

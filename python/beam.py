@@ -1,53 +1,35 @@
 """
 beam.py
 
-STEP 2: The actual solving logic.
-
-Version 1 -- the beam's length, support positions, and loads all get
-passed in as fixed numbers from main.py. A later version will let the
-user type these in instead.
-
-This file imports the data shapes from loads.py (the PointLoad and UDL
-"boxes" we defined in step 1), then builds a Beam class that knows how
-to solve itself: work out the support reactions, then build the shear
-force V(x) and bending moment M(x) equations.
+Solves for reactions, then builds V(x) and M(x) as piecewise
+expressions. Also identifies every engineering-significant point:
+supports, loads, and local extrema of the bending moment (found from
+V(x) = 0, since dM/dx = V).
 """
 
 import sympy as sp
 from loads import PointLoad, UDL
 
-# sp.symbols creates a "placeholder" variable for use in math expressions.
-# Think of it as: "x is a variable we'll build equations out of, but we
-# haven't plugged in a number yet."
 x = sp.symbols('x', real=True)
 
 
 class Beam:
     def __init__(self, length, support_a, support_b):
-        # __init__ runs automatically whenever a new Beam is created.
-        # "self" refers to "this particular beam".
         self.length = length
         self.support_a = support_a
         self.support_b = support_b
-        self.loads = []  # starts empty -- we'll add loads to this next
+        self.loads = []
 
     def add_load(self, load):
-        # .append() adds an item to the end of a list
         self.loads.append(load)
 
     def solve_reactions(self):
-        # STEP 2a: basic statics -- sum of forces = 0, sum of moments = 0.
-        a = self.support_a
-        b = self.support_b
-
+        a, b = self.support_a, self.support_b
         total_moment_about_a = 0.0
         total_downward_force = 0.0
 
-        # "for load in self.loads" means: do the following once for
-        # EACH item currently in the loads list
         for load in self.loads:
             if isinstance(load, PointLoad):
-                # isinstance checks "what kind of thing is this?"
                 total_downward_force += load.magnitude
                 total_moment_about_a += load.magnitude * (load.position - a)
             elif isinstance(load, UDL):
@@ -59,17 +41,11 @@ class Beam:
 
         r_b = total_moment_about_a / (b - a)
         r_a = total_downward_force - r_b
-
-        # store results on self so other methods can use them later
         self.reaction_a = r_a
         self.reaction_b = r_b
         return r_a, r_b
 
     def _critical_points(self):
-        # STEP 2b: find every x-position where something changes --
-        # a support, a point load, or the start/end of a UDL.
-        # a "set" automatically removes duplicates, in case two things
-        # happen to sit at the same position.
         pts = {0.0, self.length, self.support_a, self.support_b}
         for load in self.loads:
             if isinstance(load, PointLoad):
@@ -77,61 +53,56 @@ class Beam:
             elif isinstance(load, UDL):
                 pts.add(load.start)
                 pts.add(load.end)
-        return sorted(pts)  # sorted() returns them smallest to largest
+        return sorted(pts)
 
     def solve(self):
-        # STEP 2c: walk the beam left to right, one segment at a time,
-        # building the shear force and bending moment equations.
         if not hasattr(self, 'reaction_a'):
             self.solve_reactions()
 
         crit = self._critical_points()
-
-        # a dictionary maps a "key" to a "value" -- here, each critical
-        # position maps to a small list [how much V jumps, how much M
-        # jumps] right at that point.
         point_events = {p: [0.0, 0.0] for p in crit}
-
         point_events[self.support_a][0] += self.reaction_a
         point_events[self.support_b][0] += self.reaction_b
-
         for load in self.loads:
             if isinstance(load, PointLoad):
                 point_events[load.position][0] -= load.magnitude
 
-        v_pieces = []
-        m_pieces = []
-        v_start = 0.0
-        m_start = 0.0
+        v_pieces, m_pieces = [], []
+        self.point_values = {}   # x -> {'V_left', 'V_right', 'M'}
+        self._segments = []       # for exact interior V=0 root-finding
 
-        # walking through each segment between critical points, left to right
+        v_start, m_start = 0.0, 0.0
+
         for i in range(len(crit) - 1):
-            seg_start = crit[i]
-            seg_end = crit[i + 1]
+            seg_start, seg_end = crit[i], crit[i + 1]
 
+            v_left, m_left = v_start, m_start
             dV, dM = point_events[seg_start]
             v_start += dV
             m_start += dM
+            self.point_values[seg_start] = {'V_left': v_left, 'V_right': v_start, 'M': m_start}
 
             w_active = 0.0
             for load in self.loads:
                 if isinstance(load, UDL) and load.start <= seg_start and load.end >= seg_end:
                     w_active += load.intensity
 
-            xi = x - seg_start  # local distance from the start of this segment
-
+            xi = x - seg_start
             v_expr = v_start - w_active * xi
             m_expr = m_start + v_start * xi - w_active * xi**2 / 2
 
             is_last = (seg_end == crit[-1])
-            cond = sp.And(x >= seg_start, x <= seg_end) if is_last \
-                else sp.And(x >= seg_start, x < seg_end)
-
+            cond = sp.And(x >= seg_start, x <= seg_end) if is_last else sp.And(x >= seg_start, x < seg_end)
             v_pieces.append((sp.nsimplify(v_expr), cond))
             m_pieces.append((sp.nsimplify(m_expr), cond))
 
+            self._segments.append({'start': seg_start, 'end': seg_end, 'v_start': v_start, 'w': w_active})
+
             v_start = float(v_expr.subs(x, seg_end))
             m_start = float(m_expr.subs(x, seg_end))
+
+        last = crit[-1]
+        self.point_values[last] = {'V_left': v_start, 'V_right': v_start, 'M': m_start}
 
         self.V = sp.Piecewise(*v_pieces)
         self.M = sp.Piecewise(*m_pieces)
@@ -142,3 +113,71 @@ class Beam:
 
     def moment_at(self, xv):
         return float(self.M.subs(x, xv))
+
+    def zero_shear_points(self):
+        """x-positions strictly INSIDE a segment where V(x) = 0 exactly
+        (V is linear per segment, so this is an exact algebraic root,
+        not a numerical approximation). These are candidate locations
+        for a local max/min of the bending moment."""
+        roots = []
+        for seg in self._segments:
+            w = seg['w']
+            if w != 0:
+                xi_root = seg['v_start'] / w
+                seg_len = seg['end'] - seg['start']
+                if 0 < xi_root < seg_len:
+                    roots.append(seg['start'] + xi_root)
+        return roots
+
+    def key_points_report(self):
+        """One row per engineering-significant point: every support,
+        every load position, every UDL start/end, and every interior
+        V=0 point -- with V (left/right of any jump) and M at each."""
+        labels = {}
+
+        def add_label(pos, text):
+            labels.setdefault(round(pos, 6), []).append(text)
+
+        add_label(0.0, "Beam end")
+        add_label(self.length, "Beam end")
+        add_label(self.support_a, "Support A (Ra, fixed)")
+        add_label(self.support_b, "Support B (Rb, roller)")
+        for load in self.loads:
+            if isinstance(load, PointLoad):
+                add_label(load.position, "Point load")
+            elif isinstance(load, UDL):
+                add_label(load.start, "UDL start")
+                add_label(load.end, "UDL end")
+
+        zero_shear = self.zero_shear_points()
+        for xr in zero_shear:
+            add_label(xr, "V = 0")
+
+        all_x = sorted(set(list(self.point_values.keys()) + [round(r, 6) for r in zero_shear]))
+
+        rows = []
+        for xp in all_x:
+            if xp in self.point_values:
+                vals = self.point_values[xp]
+                v_left, v_right, m = vals['V_left'], vals['V_right'], vals['M']
+            else:
+                v_left = v_right = self.shear_at(xp)
+                m = self.moment_at(xp)
+
+            # a point load/reaction can flip V from + to -, which is
+            # also a local extreme of M, even though it's an instant
+            # jump rather than a smooth crossing
+            crosses_zero = (v_left * v_right < 0)
+            label_list = labels.get(round(xp, 6), [])
+            if crosses_zero and "V = 0" not in label_list:
+                label_list = label_list + ["(shear crosses zero here)"]
+
+            rows.append({'x': xp, 'labels': label_list, 'V_left': v_left, 'V_right': v_right, 'M': m})
+
+        return rows
+
+    def max_moment_point(self):
+        """The single point with the largest |M| -- the design-critical
+        section of the beam."""
+        rows = self.key_points_report()
+        return max(rows, key=lambda r: abs(r['M']))
