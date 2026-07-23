@@ -13,6 +13,8 @@ out of sync with each other.
 from beam import Beam
 from loads import PointLoad, UDL
 from diagrams import plot_beam_results
+from cross_sections import rectangle
+from stress import bending_stress, max_shear_stress_rectangle
 
 
 def get_float(prompt):
@@ -60,7 +62,20 @@ for row in beam.key_points_report():
         else f"{row['V_left']:.0f} -> {row['V_right']:.0f}"
     print(f"  x={row['x']:>6.2f} m | V={v} N | M={row['M']:>9.2f} N.m | {', '.join(row['labels'])}")
 
+# STEP 8: cross-section for stress calculations.
+# Hardcoded for now -- 0.1 m x 0.1 m (10 cm x 10 cm) solid rectangle.
+# User-selectable sections come later, once the frontend work starts.
+section = rectangle(b=0.1, h=0.1)
+
 max_row = beam.max_moment_point()
 print(f"\nGoverning section (max |M|): x={max_row['x']:.2f} m, M={max_row['M']:.2f} N.m")
 
-plot_beam_results(beam)
+max_bending_stress = bending_stress(max_row['M'], section['Z'])
+print(f"Max bending stress: {max_bending_stress/1e6:.3f} MPa (at x={max_row['x']:.2f} m)")
+
+max_v_row = beam.max_shear_point()
+tau_max = max_shear_stress_rectangle(max_v_row['V'], section['A'])
+print(f"\nGoverning section (max |V|): x={max_v_row['x']:.2f} m, V={max_v_row['V']:.2f} N")
+print(f"Max shear stress: {abs(tau_max)/1e6:.3f} MPa, occurring at the neutral axis (mid-height, y=0)")
+
+plot_beam_results(beam, section)

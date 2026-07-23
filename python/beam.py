@@ -181,3 +181,15 @@ class Beam:
         section of the beam."""
         rows = self.key_points_report()
         return max(rows, key=lambda r: abs(r['M']))
+
+    def max_shear_point(self):
+        """The point along the beam with the largest |V| (checking
+        both sides of any jump, since V can differ left vs right of a
+        point load or reaction) -- the worst-case section for shear."""
+        rows = self.key_points_report()
+        best_x, best_v = 0.0, 0.0
+        for row in rows:
+            for v in (row['V_left'], row['V_right']):
+                if abs(v) > abs(best_v):
+                    best_x, best_v = row['x'], v
+        return {'x': best_x, 'V': best_v}

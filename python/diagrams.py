@@ -1,15 +1,18 @@
 """
 diagrams.py
 
-Drawing helpers for the load diagram, SFD, and BMD -- now annotated
-with V and M values at every engineering-significant point (supports,
-loads, and local moment extrema).
+Drawing helpers for the load diagram, SFD, BMD, bending stress curve,
+and the shear stress profile through the cross-section. Layout: load
+diagram and shear stress profile share the top row (profile to the
+right, since it's a property of the cross-section, not of position
+along the beam); SFD, BMD, and bending stress stack below, full width.
 """
 
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from loads import PointLoad, UDL
+from stress import bending_stress, shear_stress_rectangle_profile, max_shear_stress_rectangle
 
 
 def draw_point_load(ax, position, magnitude):
@@ -65,8 +68,6 @@ def draw_support(ax, position, reaction, beam_length, support_type):
 
 
 def annotate_shear_values(ax, rows):
-    """Label V at every key point. Where V jumps (a point load or
-    reaction), both the value just before and just after are shown."""
     for row in rows:
         xp, v_left, v_right = row['x'], row['V_left'], row['V_right']
         jumps = abs(v_left - v_right) > 1e-6
@@ -84,8 +85,6 @@ def annotate_shear_values(ax, rows):
 
 
 def annotate_moment_values(ax, rows, max_x):
-    """Label M at every key point; the governing (largest |M|) point is
-    highlighted -- this is the design-critical section of the beam."""
     for row in rows:
         xp, m = row['x'], row['M']
         is_max = abs(xp - max_x) < 1e-6
@@ -96,20 +95,74 @@ def annotate_moment_values(ax, rows, max_x):
                     color='tab:red', fontweight='bold' if is_max else 'normal')
 
 
-def plot_beam_results(beam):
-    """Build and display the load diagram + annotated SFD + annotated
-    BMD for a solved beam."""
+def annotate_stress_values(ax, rows, Z, max_x):
+    """Same idea as annotate_moment_values, but converts M -> stress
+    (MPa) via sigma = M/Z for each key point."""
+    for row in rows:
+        xp = row['x']
+        sigma_mpa = bending_stress(row['M'], Z) / 1e6
+        is_max = abs(xp - max_x) < 1e-6
+        ax.plot(xp, sigma_mpa, 'o', color='tab:purple', markersize=7 if is_max else 4, zorder=5)
+        text = f"{sigma_mpa:.2f}" + (" (MAX)" if is_max else "")
+        ax.annotate(text, (xp, sigma_mpa), textcoords="offset points",
+                    xytext=(0, 8 if sigma_mpa >= 0 else -14), fontsize=8, ha='center',
+                    color='tab:purple', fontweight='bold' if is_max else 'normal')
+
+
+def draw_shear_stress_profile(ax, beam, section):
+    """The classic 'stress vs height' picture: a parabola for a solid
+    rectangle, evaluated at the beam's worst-case (max |V|) section --
+    this is the governing profile for shear design."""
+    max_v_row = beam.max_shear_point()
+    V_critical = max_v_row['V']
+    h = 2 * section['c']  # full height, since c = h/2 for a rectangle
+
+    y_values = np.linspace(-h / 2, h / 2, 200)
+    tau_values = shear_stress_rectangle_profile(V_critical, section['I'], h, y_values)
+    tau_mpa = [t / 1e6 for t in tau_values]
+
+    ax.plot(tau_mpa, y_values, color='tab:brown', linewidth=2)
+    ax.fill_betweenx(y_values, 0, tau_mpa, color='tab:brown', alpha=0.15)
+    ax.axhline(0, color='black', linewidth=0.6, linestyle='--')
+    ax.axvline(0, color='black', linewidth=0.6)
+
+    tau_max_mpa = max_shear_stress_rectangle(V_critical, section['A']) / 1e6
+    ax.plot(tau_max_mpa, 0, 'o', color='tab:brown', markersize=6, zorder=5)
+    ax.annotate(f"tau_max = {tau_max_mpa:.3f} MPa\n(at neutral axis, y=0)",
+                (tau_max_mpa, 0), textcoords="offset points", xytext=(-90, -25),
+                fontsize=8, color='tab:brown')
+
+    ax.set_title(f"Shear Stress Profile\n(at governing section x={max_v_row['x']:.2f} m)", fontsize=10)
+    ax.set_xlabel("Shear stress [MPa]")
+    ax.set_ylabel("Height through section, y [m]")
+
+
+def plot_beam_results(beam, section):
+    """Build and display: load diagram + shear stress profile (top
+    row), then SFD, BMD, and bending stress stacked below."""
     x_values = np.linspace(0, beam.length, 400)
     v_values = [beam.shear_at(xv) for xv in x_values]
     m_values = [beam.moment_at(xv) for xv in x_values]
+    sigma_values_mpa = [bending_stress(m, section['Z']) / 1e6 for m in m_values]
 
     rows = beam.key_points_report()
-    max_row = beam.max_moment_point()
+    max_moment_row = beam.max_moment_point()
 
-    fig, axes = plt.subplots(3, 1, figsize=(11, 11), sharex=True,
-                              gridspec_kw={'height_ratios': [1, 2, 2]})
+    fig = plt.figure(figsize=(10, 13))
+    gs = fig.add_gridspec(4, 2, height_ratios=[1, 2, 2, 2], width_ratios=[3, 1.4])
 
-    load_ax = axes[0]
+    load_ax = fig.add_subplot(gs[0, 0])
+    shear_profile_ax = fig.add_subplot(gs[0, 1])
+    # NOTE: column 0 only (not gs[row, :]) -- this keeps SFD/BMD/stress
+    # the same width as the load diagram, matching it visually. The
+    # column-1 cells in rows 1-3 are simply left empty (blank space),
+    # rather than letting the lower plots stretch wider than the load
+    # diagram above them.
+    sfd_ax = fig.add_subplot(gs[1, 0])
+    bmd_ax = fig.add_subplot(gs[2, 0])
+    stress_ax = fig.add_subplot(gs[3, 0])
+
+    # --- Load diagram ---
     load_ax.plot([0, beam.length], [0, 0], color='black', linewidth=3, zorder=2)
     for load in beam.loads:
         if isinstance(load, PointLoad):
@@ -122,20 +175,33 @@ def plot_beam_results(beam):
     load_ax.set_yticks([])
     load_ax.set_title("Load Diagram")
 
-    axes[1].plot(x_values, v_values, color='tab:blue')
-    axes[1].axhline(0, color='black', linewidth=0.8)
-    annotate_shear_values(axes[1], rows)
-    axes[1].set_ylabel("Shear Force V(x) [N]")
-    axes[1].set_title("Shear Force Diagram (SFD)")
-    axes[1].grid(True)
+    # --- Shear stress profile (through the cross-section) ---
+    draw_shear_stress_profile(shear_profile_ax, beam, section)
 
-    axes[2].plot(x_values, m_values, color='tab:red')
-    axes[2].axhline(0, color='black', linewidth=0.8)
-    annotate_moment_values(axes[2], rows, max_row['x'])
-    axes[2].set_ylabel("Bending Moment M(x) [N.m]")
-    axes[2].set_xlabel("Position along beam, x [m]")
-    axes[2].set_title("Bending Moment Diagram (BMD)")
-    axes[2].grid(True)
+    # --- SFD ---
+    sfd_ax.plot(x_values, v_values, color='tab:blue')
+    sfd_ax.axhline(0, color='black', linewidth=0.8)
+    annotate_shear_values(sfd_ax, rows)
+    sfd_ax.set_ylabel("Shear Force V(x) [N]")
+    sfd_ax.set_title("Shear Force Diagram (SFD)")
+    sfd_ax.grid(True)
+
+    # --- BMD ---
+    bmd_ax.plot(x_values, m_values, color='tab:red')
+    bmd_ax.axhline(0, color='black', linewidth=0.8)
+    annotate_moment_values(bmd_ax, rows, max_moment_row['x'])
+    bmd_ax.set_ylabel("Bending Moment M(x) [N.m]")
+    bmd_ax.set_title("Bending Moment Diagram (BMD)")
+    bmd_ax.grid(True)
+
+    # --- Bending stress ---
+    stress_ax.plot(x_values, sigma_values_mpa, color='tab:purple')
+    stress_ax.axhline(0, color='black', linewidth=0.8)
+    annotate_stress_values(stress_ax, rows, section['Z'], max_moment_row['x'])
+    stress_ax.set_ylabel("Bending Stress sigma(x) [MPa]")
+    stress_ax.set_xlabel("Position along beam, x [m]")
+    stress_ax.set_title("Bending Stress Diagram")
+    stress_ax.grid(True)
 
     plt.tight_layout()
     plt.show()
