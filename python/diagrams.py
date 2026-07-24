@@ -12,7 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from loads import PointLoad, UDL
-from stress import bending_stress, shear_stress_profile, max_shear_stress
+from stress import bending_stress, shear_stress_profile, max_shear_stress, max_von_mises_stress
 
 
 def draw_point_load(ax, position, magnitude):
@@ -109,6 +109,36 @@ def annotate_stress_values(ax, rows, section, max_x):
                     color='tab:purple', fontweight='bold' if is_max else 'normal')
 
 
+def annotate_deflection_values(ax, beam, rows, max_x, x_tolerance):
+    """Same style as the other annotated panels, in mm. max_x here
+    comes from a dense numerical scan (see plot_beam_results), not an
+    exact algebraic critical point, so we match it within one grid
+    step (x_tolerance) rather than requiring an exact float match."""
+    for row in rows:
+        xp = row['x']
+        y_mm = beam.deflection_at(xp) * 1000
+        is_max = abs(xp - max_x) < x_tolerance
+        ax.plot(xp, y_mm, 'o', color='tab:cyan', markersize=7 if is_max else 4, zorder=5)
+        text = f"{y_mm:.2f}" + (" (MAX)" if is_max else "")
+        ax.annotate(text, (xp, y_mm), textcoords="offset points",
+                    xytext=(0, 8 if y_mm >= 0 else -14), fontsize=8, ha='center',
+                    color='tab:cyan', fontweight='bold' if is_max else 'normal')
+
+
+def compute_von_mises_curve(m_values, v_values, section):
+    """Returns (vm_values_mpa, index_of_max) -- one von Mises value per
+    x, each found by scanning through the section's height at that x
+    (see stress.max_von_mises_stress for why this can't just reuse the
+    existing bending/shear curves directly)."""
+    I = section['I']
+    vm_values = []
+    for m, v in zip(m_values, v_values):
+        result = max_von_mises_stress(m, v, I, section)
+        vm_values.append(result['von_mises'] / 1e6)
+    idx_max = max(range(len(vm_values)), key=lambda i: vm_values[i])
+    return vm_values, idx_max
+
+
 def draw_shear_stress_profile(ax, beam, section):
     """The classic 'stress vs height' picture, now generic across any
     section shape: evaluated at the beam's worst-case (max |V|)
@@ -139,28 +169,36 @@ def draw_shear_stress_profile(ax, beam, section):
 
 def plot_beam_results(beam, section):
     """Build and display: load diagram + shear stress profile (top
-    row), then SFD, BMD, and bending stress stacked below."""
+    row), then SFD, BMD, bending stress, deflection, and von Mises
+    stress stacked below."""
     x_values = np.linspace(0, beam.length, 400)
     v_values = [beam.shear_at(xv) for xv in x_values]
     m_values = [beam.moment_at(xv) for xv in x_values]
     sigma_values_mpa = [bending_stress(m, section) / 1e6 for m in m_values]
+    deflection_values_mm = [beam.deflection_at(xv) * 1000 for xv in x_values]
+    vm_values_mpa, vm_idx_max = compute_von_mises_curve(m_values, v_values, section)
 
     rows = beam.key_points_report()
     max_moment_row = beam.max_moment_point()
 
-    fig = plt.figure(figsize=(10, 13))
-    gs = fig.add_gridspec(4, 2, height_ratios=[1, 2, 2, 2], width_ratios=[3, 1.4])
+    idx_defl_max = max(range(len(x_values)), key=lambda i: abs(deflection_values_mm[i]))
+    x_tolerance = (x_values[1] - x_values[0]) * 1.5  # a bit more than one grid step
+
+    fig = plt.figure(figsize=(10, 19))
+    gs = fig.add_gridspec(6, 2, height_ratios=[1, 2, 2, 2, 2, 2], width_ratios=[3, 1.4])
 
     load_ax = fig.add_subplot(gs[0, 0])
     shear_profile_ax = fig.add_subplot(gs[0, 1])
-    # NOTE: column 0 only (not gs[row, :]) -- this keeps SFD/BMD/stress
-    # the same width as the load diagram, matching it visually. The
-    # column-1 cells in rows 1-3 are simply left empty (blank space),
-    # rather than letting the lower plots stretch wider than the load
-    # diagram above them.
+    # NOTE: column 0 only (not gs[row, :]) -- this keeps every "vs x"
+    # plot the same width as the load diagram, matching it visually.
+    # The column-1 cells in rows 1-5 are simply left empty (blank
+    # space), rather than letting the lower plots stretch wider than
+    # the load diagram above them.
     sfd_ax = fig.add_subplot(gs[1, 0])
     bmd_ax = fig.add_subplot(gs[2, 0])
     stress_ax = fig.add_subplot(gs[3, 0])
+    deflection_ax = fig.add_subplot(gs[4, 0])
+    von_mises_ax = fig.add_subplot(gs[5, 0])
 
     # --- Load diagram ---
     load_ax.plot([0, beam.length], [0, 0], color='black', linewidth=3, zorder=2)
@@ -199,9 +237,28 @@ def plot_beam_results(beam, section):
     stress_ax.axhline(0, color='black', linewidth=0.8)
     annotate_stress_values(stress_ax, rows, section, max_moment_row['x'])
     stress_ax.set_ylabel("Bending Stress sigma(x) [MPa]")
-    stress_ax.set_xlabel("Position along beam, x [m]")
     stress_ax.set_title("Bending Stress Diagram")
     stress_ax.grid(True)
+
+    # --- Deflection ---
+    deflection_ax.plot(x_values, deflection_values_mm, color='tab:cyan')
+    deflection_ax.axhline(0, color='black', linewidth=0.8)
+    annotate_deflection_values(deflection_ax, beam, rows, x_values[idx_defl_max], x_tolerance)
+    deflection_ax.set_ylabel("Deflection y(x) [mm]")
+    deflection_ax.set_title("Deflection Diagram")
+    deflection_ax.grid(True)
+
+    # --- von Mises stress ---
+    von_mises_ax.plot(x_values, vm_values_mpa, color='tab:olive')
+    von_mises_ax.axhline(0, color='black', linewidth=0.8)
+    max_x_vm, max_vm = x_values[vm_idx_max], vm_values_mpa[vm_idx_max]
+    von_mises_ax.plot(max_x_vm, max_vm, 'o', color='tab:olive', markersize=7, zorder=5)
+    von_mises_ax.annotate(f"{max_vm:.2f} (MAX)", (max_x_vm, max_vm), textcoords="offset points",
+                           xytext=(0, 8), fontsize=8, ha='center', color='tab:olive', fontweight='bold')
+    von_mises_ax.set_ylabel("von Mises Stress [MPa]")
+    von_mises_ax.set_xlabel("Position along beam, x [m]")
+    von_mises_ax.set_title("von Mises Stress Diagram")
+    von_mises_ax.grid(True)
 
     plt.tight_layout()
     plt.show()

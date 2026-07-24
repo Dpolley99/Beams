@@ -193,3 +193,63 @@ class Beam:
                 if abs(v) > abs(best_v):
                     best_x, best_v = row['x'], v
         return {'x': best_x, 'V': best_v}
+
+    def solve_deflection(self, E, I):
+        """Computes the beam's deflection curve y(x), assuming a
+        constant EI (uniform section) along the whole beam.
+
+        Method: EI*y''(x) = M(x). Integrating twice gives a
+        'particular' curve Y_p(x), built assuming slope=0 and y=0 at
+        x=0 -- but that assumption is almost certainly wrong for the
+        REAL beam, since we don't actually know the slope or
+        deflection at x=0. So the true solution is
+            y(x) = Y_p(x) + theta0*x + y0
+        (adding a straight line doesn't change y'', so it's still a
+        valid solution to the same M(x)) -- theta0 and y0 are found
+        from the two conditions we DO know: y=0 at both supports."""
+        if not hasattr(self, 'M'):
+            self.solve()
+
+        EI = E * I
+        theta_pieces, y_pieces = [], []
+        theta_start, y_start = 0.0, 0.0
+
+        for seg in self._segments:
+            seg_start, seg_end = seg['start'], seg['end']
+            v_start, w_active = seg['v_start'], seg['w']
+            m_start = self.point_values[seg_start]['M']
+
+            xi = x - seg_start
+            m_expr = m_start + v_start * xi - w_active * xi**2 / 2
+
+            # indefinite-integrate, then subtract the value at
+            # seg_start -- gives the definite integral from seg_start
+            # to x, without the "same symbol as integration bound"
+            # ambiguity of writing sp.integrate(f, (x, seg_start, x))
+            F = sp.integrate(m_expr, x)
+            theta_expr = theta_start + (F - F.subs(x, seg_start)) / EI
+
+            G = sp.integrate(theta_expr, x)
+            y_expr = y_start + (G - G.subs(x, seg_start))
+
+            is_last = (seg_end == self._segments[-1]['end'])
+            cond = sp.And(x >= seg_start, x <= seg_end) if is_last else sp.And(x >= seg_start, x < seg_end)
+            theta_pieces.append((sp.nsimplify(theta_expr), cond))
+            y_pieces.append((sp.nsimplify(y_expr), cond))
+
+            theta_start = float(theta_expr.subs(x, seg_end))
+            y_start = float(y_expr.subs(x, seg_end))
+
+        self.Theta_p = sp.Piecewise(*theta_pieces)
+        self.Y_p = sp.Piecewise(*y_pieces)
+
+        # solve for theta0, y0 using y(support_a)=0 and y(support_b)=0
+        Yp_a = float(self.Y_p.subs(x, self.support_a))
+        Yp_b = float(self.Y_p.subs(x, self.support_b))
+        self.theta0 = (Yp_a - Yp_b) / (self.support_b - self.support_a)
+        self.y0 = -self.theta0 * self.support_a - Yp_a
+        self.EI = EI
+        return None
+
+    def deflection_at(self, xv):
+        return self.y0 + self.theta0 * xv + float(self.Y_p.subs(x, xv))

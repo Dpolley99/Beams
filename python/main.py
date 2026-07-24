@@ -14,7 +14,8 @@ from beam import Beam
 from loads import PointLoad, UDL
 from diagrams import plot_beam_results
 from cross_sections import rectangle, hollow_rectangle, circle, hollow_circle, channel, i_section, t_section
-from stress import bending_stress, max_shear_stress
+from stress import bending_stress, max_shear_stress, max_von_mises_stress
+import numpy as np
 
 
 def get_float(prompt):
@@ -135,5 +136,27 @@ shear_result = max_shear_stress(max_v_row['V'], section['I'], section)
 tau_max, y_at_max = shear_result['tau'], shear_result['y']
 print(f"\nGoverning section (max |V|): x={max_v_row['x']:.2f} m, V={max_v_row['V']:.2f} N")
 print(f"Max shear stress: {abs(tau_max)/1e6:.3f} MPa, occurring at y={y_at_max*1000:.2f} mm from the neutral axis")
+
+# STEP 10: deflection -- needs Young's modulus (material stiffness).
+print("\n=== Material ===")
+E = get_float("Young's modulus E (Pa, e.g. 200e9 for steel): ")
+beam.solve_deflection(E, section['I'])
+
+# von Mises: scan every x on the plotting grid and report the worst one.
+# (Unlike max |M| or max |V|, von Mises doesn't have as clean a way to
+# pin down candidate x-positions in advance, since it depends on BOTH
+# M(x) and V(x) together -- so this is found by dense numerical search
+# over x, not a small set of exact critical points like the others.)
+scan_x = np.linspace(0, beam.length, 400)
+best_vm, best_vm_x = 0.0, 0.0
+for xv in scan_x:
+    result = max_von_mises_stress(beam.moment_at(xv), beam.shear_at(xv), section['I'], section)
+    if result['von_mises'] > best_vm:
+        best_vm, best_vm_x = result['von_mises'], xv
+print(f"\nGoverning section (max von Mises stress): x={best_vm_x:.2f} m")
+print(f"Max von Mises stress: {best_vm/1e6:.3f} MPa")
+
+max_deflection = max(scan_x, key=lambda xv: abs(beam.deflection_at(xv)))
+print(f"\nMax deflection: {beam.deflection_at(max_deflection)*1000:.3f} mm (at x={max_deflection:.2f} m)")
 
 plot_beam_results(beam, section)
