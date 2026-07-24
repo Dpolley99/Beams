@@ -13,8 +13,8 @@ out of sync with each other.
 from beam import Beam
 from loads import PointLoad, UDL
 from diagrams import plot_beam_results
-from cross_sections import rectangle
-from stress import bending_stress, max_shear_stress_rectangle
+from cross_sections import rectangle, hollow_rectangle, circle, hollow_circle, channel, i_section, t_section
+from stress import bending_stress, max_shear_stress
 
 
 def get_float(prompt):
@@ -29,6 +29,21 @@ def get_float(prompt):
             return float(text)
         except ValueError:
             print("  Please enter a number (e.g. 12 or 12.5).")
+
+
+def get_choice(prompt, valid_options):
+    # same idea as get_float, but for picking a numbered menu option --
+    # keeps asking until the answer is an integer AND one of the
+    # allowed choices.
+    while True:
+        text = input(prompt)
+        try:
+            choice = int(text)
+            if choice in valid_options:
+                return choice
+        except ValueError:
+            pass
+        print(f"  Please enter one of: {', '.join(str(o) for o in valid_options)}")
 
 
 print("=== Beam setup ===")
@@ -62,20 +77,63 @@ for row in beam.key_points_report():
         else f"{row['V_left']:.0f} -> {row['V_right']:.0f}"
     print(f"  x={row['x']:>6.2f} m | V={v} N | M={row['M']:>9.2f} N.m | {', '.join(row['labels'])}")
 
-# STEP 8: cross-section for stress calculations.
-# Hardcoded for now -- 0.1 m x 0.1 m (10 cm x 10 cm) solid rectangle.
-# User-selectable sections come later, once the frontend work starts.
-section = rectangle(b=0.1, h=0.1)
+# STEP 9: cross-section for stress calculations -- now user-selectable.
+print("\n=== Cross-section ===")
+print("1. Rectangle")
+print("2. Hollow rectangle")
+print("3. Circle")
+print("4. Hollow circle")
+print("5. Channel (C-section)")
+print("6. I-section")
+print("7. T-section")
+section_choice = get_choice("Choose a section type (1-7): ", range(1, 8))
+
+if section_choice == 1:
+    b = get_float("Width b (m): ")
+    h = get_float("Height h (m): ")
+    section = rectangle(b, h)
+elif section_choice == 2:
+    b_out = get_float("Outer width b_out (m): ")
+    h_out = get_float("Outer height h_out (m): ")
+    b_in = get_float("Inner width b_in (m): ")
+    h_in = get_float("Inner height h_in (m): ")
+    section = hollow_rectangle(b_out, h_out, b_in, h_in)
+elif section_choice == 3:
+    d = get_float("Diameter d (m): ")
+    section = circle(d)
+elif section_choice == 4:
+    d_out = get_float("Outer diameter d_out (m): ")
+    d_in = get_float("Inner diameter d_in (m): ")
+    section = hollow_circle(d_out, d_in)
+elif section_choice == 5:
+    H = get_float("Overall height H (m): ")
+    B = get_float("Flange width B (m): ")
+    tw = get_float("Web thickness tw (m): ")
+    tf = get_float("Flange thickness tf (m): ")
+    section = channel(H, B, tw, tf)
+elif section_choice == 6:
+    H = get_float("Overall height H (m): ")
+    B = get_float("Flange width B (m): ")
+    tw = get_float("Web thickness tw (m): ")
+    tf = get_float("Flange thickness tf (m): ")
+    section = i_section(H, B, tw, tf)
+else:  # section_choice == 7
+    H = get_float("Overall height H (m): ")
+    B = get_float("Flange width B (m): ")
+    tw = get_float("Web thickness tw (m): ")
+    tf = get_float("Flange thickness tf (m): ")
+    section = t_section(H, B, tw, tf)
 
 max_row = beam.max_moment_point()
 print(f"\nGoverning section (max |M|): x={max_row['x']:.2f} m, M={max_row['M']:.2f} N.m")
 
-max_bending_stress = bending_stress(max_row['M'], section['Z'])
+max_bending_stress = bending_stress(max_row['M'], section)
 print(f"Max bending stress: {max_bending_stress/1e6:.3f} MPa (at x={max_row['x']:.2f} m)")
 
 max_v_row = beam.max_shear_point()
-tau_max = max_shear_stress_rectangle(max_v_row['V'], section['A'])
+shear_result = max_shear_stress(max_v_row['V'], section['I'], section)
+tau_max, y_at_max = shear_result['tau'], shear_result['y']
 print(f"\nGoverning section (max |V|): x={max_v_row['x']:.2f} m, V={max_v_row['V']:.2f} N")
-print(f"Max shear stress: {abs(tau_max)/1e6:.3f} MPa, occurring at the neutral axis (mid-height, y=0)")
+print(f"Max shear stress: {abs(tau_max)/1e6:.3f} MPa, occurring at y={y_at_max*1000:.2f} mm from the neutral axis")
 
 plot_beam_results(beam, section)

@@ -12,7 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from loads import PointLoad, UDL
-from stress import bending_stress, shear_stress_rectangle_profile, max_shear_stress_rectangle
+from stress import bending_stress, shear_stress_profile, max_shear_stress
 
 
 def draw_point_load(ax, position, magnitude):
@@ -95,12 +95,12 @@ def annotate_moment_values(ax, rows, max_x):
                     color='tab:red', fontweight='bold' if is_max else 'normal')
 
 
-def annotate_stress_values(ax, rows, Z, max_x):
+def annotate_stress_values(ax, rows, section, max_x):
     """Same idea as annotate_moment_values, but converts M -> stress
-    (MPa) via sigma = M/Z for each key point."""
+    (MPa) via bending_stress() for each key point."""
     for row in rows:
         xp = row['x']
-        sigma_mpa = bending_stress(row['M'], Z) / 1e6
+        sigma_mpa = bending_stress(row['M'], section) / 1e6
         is_max = abs(xp - max_x) < 1e-6
         ax.plot(xp, sigma_mpa, 'o', color='tab:purple', markersize=7 if is_max else 4, zorder=5)
         text = f"{sigma_mpa:.2f}" + (" (MAX)" if is_max else "")
@@ -110,15 +110,14 @@ def annotate_stress_values(ax, rows, Z, max_x):
 
 
 def draw_shear_stress_profile(ax, beam, section):
-    """The classic 'stress vs height' picture: a parabola for a solid
-    rectangle, evaluated at the beam's worst-case (max |V|) section --
-    this is the governing profile for shear design."""
+    """The classic 'stress vs height' picture, now generic across any
+    section shape: evaluated at the beam's worst-case (max |V|)
+    section, using that section's own q_func/b_func."""
     max_v_row = beam.max_shear_point()
     V_critical = max_v_row['V']
-    h = 2 * section['c']  # full height, since c = h/2 for a rectangle
 
-    y_values = np.linspace(-h / 2, h / 2, 200)
-    tau_values = shear_stress_rectangle_profile(V_critical, section['I'], h, y_values)
+    y_values = np.linspace(section['y_min'], section['y_max'], 200)
+    tau_values = shear_stress_profile(V_critical, section['I'], section, y_values)
     tau_mpa = [t / 1e6 for t in tau_values]
 
     ax.plot(tau_mpa, y_values, color='tab:brown', linewidth=2)
@@ -126,10 +125,11 @@ def draw_shear_stress_profile(ax, beam, section):
     ax.axhline(0, color='black', linewidth=0.6, linestyle='--')
     ax.axvline(0, color='black', linewidth=0.6)
 
-    tau_max_mpa = max_shear_stress_rectangle(V_critical, section['A']) / 1e6
-    ax.plot(tau_max_mpa, 0, 'o', color='tab:brown', markersize=6, zorder=5)
-    ax.annotate(f"tau_max = {tau_max_mpa:.3f} MPa\n(at neutral axis, y=0)",
-                (tau_max_mpa, 0), textcoords="offset points", xytext=(-90, -25),
+    result = max_shear_stress(V_critical, section['I'], section)
+    tau_max_mpa, y_at_max = result['tau'] / 1e6, result['y']
+    ax.plot(tau_max_mpa, y_at_max, 'o', color='tab:brown', markersize=6, zorder=5)
+    ax.annotate(f"tau_max = {tau_max_mpa:.3f} MPa\n(at y={y_at_max*1000:.1f} mm)",
+                (tau_max_mpa, y_at_max), textcoords="offset points", xytext=(-90, -25),
                 fontsize=8, color='tab:brown')
 
     ax.set_title(f"Shear Stress Profile\n(at governing section x={max_v_row['x']:.2f} m)", fontsize=10)
@@ -143,7 +143,7 @@ def plot_beam_results(beam, section):
     x_values = np.linspace(0, beam.length, 400)
     v_values = [beam.shear_at(xv) for xv in x_values]
     m_values = [beam.moment_at(xv) for xv in x_values]
-    sigma_values_mpa = [bending_stress(m, section['Z']) / 1e6 for m in m_values]
+    sigma_values_mpa = [bending_stress(m, section) / 1e6 for m in m_values]
 
     rows = beam.key_points_report()
     max_moment_row = beam.max_moment_point()
@@ -197,7 +197,7 @@ def plot_beam_results(beam, section):
     # --- Bending stress ---
     stress_ax.plot(x_values, sigma_values_mpa, color='tab:purple')
     stress_ax.axhline(0, color='black', linewidth=0.8)
-    annotate_stress_values(stress_ax, rows, section['Z'], max_moment_row['x'])
+    annotate_stress_values(stress_ax, rows, section, max_moment_row['x'])
     stress_ax.set_ylabel("Bending Stress sigma(x) [MPa]")
     stress_ax.set_xlabel("Position along beam, x [m]")
     stress_ax.set_title("Bending Stress Diagram")
