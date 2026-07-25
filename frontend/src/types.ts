@@ -55,10 +55,17 @@ export interface Governing {
   max_deflection: GoverningPoint
 }
 
+export interface ShearProfile {
+  y: number[]
+  tau: number[]
+  x_governing: number
+}
+
 export interface BeamResult {
   reactions: { a: number; b: number }
   curves: Curves
   key_points: KeyPoint[]
   governing: Governing
+  shear_profile: ShearProfile
   section: Record<string, number>
 }

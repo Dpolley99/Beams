@@ -11,7 +11,7 @@ without needing a running web server (or even FastAPI installed).
 from beam import Beam
 from loads import PointLoad, UDL
 from cross_sections import rectangle, hollow_rectangle, circle, hollow_circle, channel, i_section, t_section
-from stress import bending_stress, max_shear_stress, max_von_mises_stress
+from stress import bending_stress, max_shear_stress, max_von_mises_stress, shear_stress_profile
 
 SECTION_BUILDERS = {
     "rectangle": lambda p: rectangle(p["b"], p["h"]),
@@ -72,6 +72,12 @@ def solve_beam(payload, n_points=400):
     max_shear_row = beam.max_shear_point()
     shear_stress_result = max_shear_stress(max_shear_row["V"], section["I"], section)
 
+    # the full shear stress profile (stress vs height) at the governing
+    # (max |V|) section -- this is what the frontend draws as the panel
+    # next to the load diagram, matching the Python version's plot
+    profile_y = [section["y_min"] + (section["y_max"] - section["y_min"]) * i / 199 for i in range(200)]
+    profile_tau = shear_stress_profile(max_shear_row["V"], section["I"], section, profile_y)
+
     vm_idx = max(range(len(vm_values)), key=lambda i: vm_values[i])
     defl_idx = max(range(len(deflection_values)), key=lambda i: abs(deflection_values[i]))
 
@@ -109,6 +115,11 @@ def solve_beam(payload, n_points=400):
             },
             "max_von_mises": {"x": float(x_values[vm_idx]), "value": float(vm_values[vm_idx])},
             "max_deflection": {"x": float(x_values[defl_idx]), "value": float(deflection_values[defl_idx])},
+        },
+        "shear_profile": {
+            "y": [float(v) for v in profile_y],
+            "tau": [float(v) for v in profile_tau],
+            "x_governing": float(max_shear_row["x"]),
         },
         "section": section_public,
     }

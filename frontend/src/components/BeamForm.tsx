@@ -3,7 +3,7 @@ import type { BeamRequest, BeamResult } from '../types'
 import { solveBeam } from '../api'
 
 interface Props {
-  onResult: (result: BeamResult) => void
+  onSolved: (request: BeamRequest, result: BeamResult) => void
 }
 
 // Starter scope: ONE point load + ONE UDL + a rectangular section --
@@ -12,7 +12,7 @@ interface Props {
 // so extending this form to add/remove multiple loads, or a dropdown
 // for section type (with fields that change based on the selection),
 // is the natural next step -- this just proves the wiring end-to-end.
-export default function BeamForm({ onResult }: Props) {
+export default function BeamForm({ onSolved }: Props) {
   const [length, setLength] = useState(16)
   const [supportA, setSupportA] = useState(2)
   const [supportB, setSupportB] = useState(10)
@@ -46,7 +46,7 @@ export default function BeamForm({ onResult }: Props) {
 
     try {
       const result = await solveBeam(request)
-      onResult(result)
+      onSolved(request, result)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
