@@ -33,7 +33,7 @@ export default function Home() {
   const sigmaMaxIdx = result ? argMaxAbs(result.curves.sigma) : 0
 
   return (
-    <div className="mx-auto max-w-6xl p-8">
+    <div className="mx-auto max-w-7xl p-8">
       <h1 className="mb-6 text-2xl font-bold text-gray-900">Beam Calculator</h1>
 
       <div className="mb-8">
@@ -45,12 +45,11 @@ export default function Home() {
       ) : (
         <div className="space-y-6">
           {/* Top row: load diagram + shear stress profile, side by
-              side -- the load diagram is now sized the same as every
-              other chart below it (600x260), the shear profile sits
-              to its right as a narrower side panel. Any leftover
-              space in that row is fine for now (reserved for a
-              summary panel later). */}
-          <div className="flex flex-wrap gap-6">
+              side. flex-nowrap + overflow-x-auto guarantees these
+              never wrap onto separate lines -- if the viewport is too
+              narrow to fit both, this row scrolls horizontally on its
+              own instead of breaking the layout. */}
+          <div className="flex flex-nowrap gap-6 overflow-x-auto pb-2">
             <LoadDiagram
               length={request.length}
               supportA={request.support_a}
@@ -60,7 +59,12 @@ export default function Home() {
               pointLoads={request.point_loads}
               udls={request.udls}
             />
-            <ShearStressProfile profile={result.shear_profile} />
+            <ShearStressProfile
+              profile={result.shear_profile}
+              sectionType={request.section_type}
+              sectionParams={request.section_params}
+              section={result.section}
+            />
           </div>
 
           <CurveChart

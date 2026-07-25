@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import type { BeamRequest, BeamResult } from '../types'
 import { solveBeam } from '../api'
 import { SECTION_LABELS, SECTION_FIELDS, defaultParamsFor } from '../sectionTypes'
+import CrossSectionPreview from './CrossSectionPreview'
 
 interface Props {
   onSolved: (request: BeamRequest, result: BeamResult) => void
@@ -119,6 +120,8 @@ export default function BeamForm({ onSolved }: Props) {
               step={0.001}
             />
           ))}
+
+          <CrossSectionPreview sectionType={sectionType} sectionParams={sectionParams} />
         </fieldset>
 
         <fieldset className="space-y-3">
