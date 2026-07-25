@@ -1,17 +1,17 @@
 import { useState, FormEvent } from 'react'
 import type { BeamRequest, BeamResult } from '../types'
 import { solveBeam } from '../api'
+import { SECTION_LABELS, SECTION_FIELDS, defaultParamsFor } from '../sectionTypes'
 
 interface Props {
   onSolved: (request: BeamRequest, result: BeamResult) => void
 }
 
-// Starter scope: ONE point load + ONE UDL + a rectangular section --
-// mirrors the original console version's flow. The backend already
-// accepts arrays of loads and every section type from cross_sections.py,
-// so extending this form to add/remove multiple loads, or a dropdown
-// for section type (with fields that change based on the selection),
-// is the natural next step -- this just proves the wiring end-to-end.
+// Starter scope: ONE point load + ONE UDL. Section type is now fully
+// selectable (see sectionTypes.ts) -- picking a different shape swaps
+// in that shape's own fields with sensible defaults. Multiple loads
+// (add/remove) is the next natural extension, following the same
+// backend-already-supports-it pattern.
 export default function BeamForm({ onSolved }: Props) {
   const [length, setLength] = useState(16)
   const [supportA, setSupportA] = useState(2)
@@ -21,12 +21,26 @@ export default function BeamForm({ onSolved }: Props) {
   const [udlIntensity, setUdlIntensity] = useState(150)
   const [udlStart, setUdlStart] = useState(5)
   const [udlEnd, setUdlEnd] = useState(11)
-  const [sectionB, setSectionB] = useState(0.1)
-  const [sectionH, setSectionH] = useState(0.1)
+
+  const [sectionType, setSectionType] = useState('rectangle')
+  const [sectionParams, setSectionParams] = useState<Record<string, number>>(defaultParamsFor('rectangle'))
+
   const [youngsModulus, setYoungsModulus] = useState(200e9)
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // switching shape resets to that shape's own default dimensions --
+  // e.g. a circle has no "b"/"h", so keeping old rectangle values
+  // around would just be stale, unused data
+  function handleSectionTypeChange(newType: string) {
+    setSectionType(newType)
+    setSectionParams(defaultParamsFor(newType))
+  }
+
+  function updateSectionParam(key: string, value: number) {
+    setSectionParams((prev) => ({ ...prev, [key]: value }))
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -39,8 +53,8 @@ export default function BeamForm({ onSolved }: Props) {
       support_b: supportB,
       point_loads: [{ magnitude: loadMagnitude, position: loadPosition }],
       udls: [{ intensity: udlIntensity, start: udlStart, end: udlEnd }],
-      section_type: 'rectangle',
-      section_params: { b: sectionB, h: sectionH },
+      section_type: sectionType,
+      section_params: sectionParams,
       E: youngsModulus,
     }
 
@@ -77,9 +91,31 @@ export default function BeamForm({ onSolved }: Props) {
       </fieldset>
 
       <fieldset className="space-y-3">
-        <legend className="font-semibold text-gray-800">Section (rectangle)</legend>
-        <NumberField label="Width b (m)" value={sectionB} onChange={setSectionB} step={0.01} />
-        <NumberField label="Height h (m)" value={sectionH} onChange={setSectionH} step={0.01} />
+        <legend className="font-semibold text-gray-800">Cross-section</legend>
+        <label className="block text-sm">
+          <span className="text-gray-600">Section type</span>
+          <select
+            value={sectionType}
+            onChange={(e) => handleSectionTypeChange(e.target.value)}
+            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-1.5 focus:border-blue-500 focus:outline-none"
+          >
+            {Object.entries(SECTION_LABELS).map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {SECTION_FIELDS[sectionType].map((field) => (
+          <NumberField
+            key={field.key}
+            label={field.label}
+            value={sectionParams[field.key] ?? field.default}
+            onChange={(v) => updateSectionParam(field.key, v)}
+            step={0.001}
+          />
+        ))}
       </fieldset>
 
       <fieldset className="space-y-3">
