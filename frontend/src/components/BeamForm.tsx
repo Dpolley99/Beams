@@ -1,4 +1,5 @@
-import { useState, FormEvent } from 'react'
+import { useState } from 'react'
+import type { FormEvent } from 'react'
 import type { BeamRequest, BeamResult } from '../types'
 import { solveBeam } from '../api'
 import { SECTION_LABELS, SECTION_FIELDS, defaultParamsFor } from '../sectionTypes'
@@ -7,11 +8,15 @@ interface Props {
   onSolved: (request: BeamRequest, result: BeamResult) => void
 }
 
-// Starter scope: ONE point load + ONE UDL. Section type is now fully
-// selectable (see sectionTypes.ts) -- picking a different shape swaps
-// in that shape's own fields with sensible defaults. Multiple loads
-// (add/remove) is the next natural extension, following the same
+// Starter scope: ONE point load + ONE UDL. Section type is fully
+// selectable (see sectionTypes.ts). Multiple loads (add/remove) is
+// the next natural extension, following the same
 // backend-already-supports-it pattern.
+//
+// Layout: fieldsets sit in a responsive grid (side by side on wide
+// screens, wrapping on narrow ones) so the whole form reads as one
+// horizontal "setup bar" across the top, rather than a tall stacked
+// sidebar.
 export default function BeamForm({ onSolved }: Props) {
   const [length, setLength] = useState(16)
   const [supportA, setSupportA] = useState(2)
@@ -30,9 +35,6 @@ export default function BeamForm({ onSolved }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // switching shape resets to that shape's own default dimensions --
-  // e.g. a circle has no "b"/"h", so keeping old rectangle values
-  // around would just be stale, unused data
   function handleSectionTypeChange(newType: string) {
     setSectionType(newType)
     setSectionParams(defaultParamsFor(newType))
@@ -69,66 +71,68 @@ export default function BeamForm({ onSolved }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 p-6">
-      <fieldset className="space-y-3">
-        <legend className="font-semibold text-gray-800">Beam setup</legend>
-        <NumberField label="Length (m)" value={length} onChange={setLength} />
-        <NumberField label="Support A position (m, fixed)" value={supportA} onChange={setSupportA} />
-        <NumberField label="Support B position (m, roller)" value={supportB} onChange={setSupportB} />
-      </fieldset>
+    <form onSubmit={handleSubmit} className="rounded-lg border border-gray-200 p-6">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <fieldset className="space-y-3">
+          <legend className="font-semibold text-gray-800">Beam setup</legend>
+          <NumberField label="Length (m)" value={length} onChange={setLength} />
+          <NumberField label="Support A position (m, fixed)" value={supportA} onChange={setSupportA} />
+          <NumberField label="Support B position (m, roller)" value={supportB} onChange={setSupportB} />
+        </fieldset>
 
-      <fieldset className="space-y-3">
-        <legend className="font-semibold text-gray-800">Point load</legend>
-        <NumberField label="Magnitude (N)" value={loadMagnitude} onChange={setLoadMagnitude} />
-        <NumberField label="Position (m)" value={loadPosition} onChange={setLoadPosition} />
-      </fieldset>
+        <fieldset className="space-y-3">
+          <legend className="font-semibold text-gray-800">Point load</legend>
+          <NumberField label="Magnitude (N)" value={loadMagnitude} onChange={setLoadMagnitude} />
+          <NumberField label="Position (m)" value={loadPosition} onChange={setLoadPosition} />
+        </fieldset>
 
-      <fieldset className="space-y-3">
-        <legend className="font-semibold text-gray-800">UDL</legend>
-        <NumberField label="Intensity (N/m)" value={udlIntensity} onChange={setUdlIntensity} />
-        <NumberField label="Start (m)" value={udlStart} onChange={setUdlStart} />
-        <NumberField label="End (m)" value={udlEnd} onChange={setUdlEnd} />
-      </fieldset>
+        <fieldset className="space-y-3">
+          <legend className="font-semibold text-gray-800">UDL</legend>
+          <NumberField label="Intensity (N/m)" value={udlIntensity} onChange={setUdlIntensity} />
+          <NumberField label="Start (m)" value={udlStart} onChange={setUdlStart} />
+          <NumberField label="End (m)" value={udlEnd} onChange={setUdlEnd} />
+        </fieldset>
 
-      <fieldset className="space-y-3">
-        <legend className="font-semibold text-gray-800">Cross-section</legend>
-        <label className="block text-sm">
-          <span className="text-gray-600">Section type</span>
-          <select
-            value={sectionType}
-            onChange={(e) => handleSectionTypeChange(e.target.value)}
-            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-1.5 focus:border-blue-500 focus:outline-none"
-          >
-            {Object.entries(SECTION_LABELS).map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <fieldset className="space-y-3">
+          <legend className="font-semibold text-gray-800">Cross-section</legend>
+          <label className="block text-sm">
+            <span className="text-gray-600">Section type</span>
+            <select
+              value={sectionType}
+              onChange={(e) => handleSectionTypeChange(e.target.value)}
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-1.5 focus:border-blue-500 focus:outline-none"
+            >
+              {Object.entries(SECTION_LABELS).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        {SECTION_FIELDS[sectionType].map((field) => (
-          <NumberField
-            key={field.key}
-            label={field.label}
-            value={sectionParams[field.key] ?? field.default}
-            onChange={(v) => updateSectionParam(field.key, v)}
-            step={0.001}
-          />
-        ))}
-      </fieldset>
+          {SECTION_FIELDS[sectionType].map((field) => (
+            <NumberField
+              key={field.key}
+              label={field.label}
+              value={sectionParams[field.key] ?? field.default}
+              onChange={(v) => updateSectionParam(field.key, v)}
+              step={0.001}
+            />
+          ))}
+        </fieldset>
 
-      <fieldset className="space-y-3">
-        <legend className="font-semibold text-gray-800">Material</legend>
-        <NumberField label="Young's modulus E (Pa)" value={youngsModulus} onChange={setYoungsModulus} />
-      </fieldset>
+        <fieldset className="space-y-3">
+          <legend className="font-semibold text-gray-800">Material</legend>
+          <NumberField label="Young's modulus E (Pa)" value={youngsModulus} onChange={setYoungsModulus} />
+        </fieldset>
+      </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-md bg-blue-600 px-4 py-2 text-white font-medium hover:bg-blue-700 disabled:opacity-50"
+        className="mt-6 w-full rounded-md bg-blue-600 px-4 py-2 text-white font-medium hover:bg-blue-700 disabled:opacity-50 sm:w-auto sm:px-8"
       >
         {loading ? 'Solving...' : 'Solve beam'}
       </button>

@@ -44,7 +44,7 @@ export default function ShearStressProfile({ profile }: Props) {
     <div className="rounded-lg border border-gray-200 p-4">
       <h3 className="mb-1 font-semibold text-gray-800">Shear Stress Profile</h3>
       <p className="mb-2 text-xs text-gray-500">at governing section x = {x_governing.toFixed(2)} m</p>
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-auto">
+      <svg width={WIDTH} height={HEIGHT} viewBox={`0 0 ${WIDTH} ${HEIGHT}`}>
         {/* axes */}
         <line x1={zeroLineX} y1={MARGIN} x2={zeroLineX} y2={HEIGHT - MARGIN} stroke="#000" strokeWidth={1} />
         <line

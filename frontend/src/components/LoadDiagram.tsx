@@ -10,14 +10,13 @@ interface Props {
   udls: UDLInput[]
 }
 
-// Fixed pixel coordinate space (NOT tied to the beam's real length in
-// the vertical direction) -- this keeps stroke widths/arrow sizes
-// looking consistent regardless of how long the beam is, unlike
-// letting the SVG viewBox stretch non-uniformly.
-const WIDTH = 800
-const HEIGHT = 170
+// Fixed pixel coordinate space, matching CurveChart's own fixed
+// 600x260 size -- so the load diagram reads as "one more chart in the
+// row" instead of a differently-proportioned block.
+const WIDTH = 600
+const HEIGHT = 260
 const MARGIN = 30
-const BEAM_Y = 80
+const BEAM_Y = 110
 
 export default function LoadDiagram({
   length,
@@ -34,7 +33,7 @@ export default function LoadDiagram({
   return (
     <div className="rounded-lg border border-gray-200 p-4">
       <h3 className="mb-2 font-semibold text-gray-800">Load Diagram</h3>
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-auto">
+      <svg width={WIDTH} height={HEIGHT} viewBox={`0 0 ${WIDTH} ${HEIGHT}`}>
         {/* the beam itself */}
         <line x1={xScale(0)} y1={BEAM_Y} x2={xScale(length)} y2={BEAM_Y} stroke="black" strokeWidth={4} />
 
