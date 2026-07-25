@@ -31,7 +31,7 @@ export default function LoadDiagram({
   const xScale = (pos: number) => MARGIN + (pos / length) * usableWidth
 
   return (
-    <div className="rounded-lg border border-gray-200 p-4 flex-shrink-0">
+    <div className="rounded-lg border border-gray-200 p-4 shrink-0">
       <h3 className="mb-2 font-semibold text-gray-800">Load Diagram</h3>
       <svg width={WIDTH} height={HEIGHT} viewBox={`0 0 ${WIDTH} ${HEIGHT}`}>
         {/* the beam itself */}

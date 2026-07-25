@@ -54,7 +54,7 @@ export default function ShearStressProfile({ profile, sectionType, sectionParams
   const pixelX = (xv: number) => centerX + xv * scaleX
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 flex-shrink-0">
+    <div className="rounded-lg border border-gray-200 bg-white p-4 shrink-0">
       <h3 className="mb-1 font-semibold text-gray-800">Cross-Section &amp; Shear Stress Profile</h3>
       <p className="mb-2 text-xs text-gray-500">at governing section x = {x_governing.toFixed(2)} m</p>
       {sectionType === 'channel' && (
