@@ -4,6 +4,7 @@ import type { BeamRequest, BeamResult } from '../types'
 import { solveBeam } from '../api'
 import { SECTION_LABELS, SECTION_FIELDS, defaultParamsFor } from '../sectionTypes'
 import CrossSectionPreview from './CrossSectionPreview'
+import BeamPreview from './BeamPreview'
 
 interface Props {
   onSolved: (request: BeamRequest, result: BeamResult) => void
@@ -128,6 +129,16 @@ export default function BeamForm({ onSolved }: Props) {
           <legend className="font-semibold text-gray-800">Material</legend>
           <NumberField label="Young's modulus E (Pa)" value={youngsModulus} onChange={setYoungsModulus} />
         </fieldset>
+      </div>
+
+      <div className="mt-6">
+        <BeamPreview
+          length={length}
+          supportA={supportA}
+          supportB={supportB}
+          pointLoads={[{ magnitude: loadMagnitude, position: loadPosition }]}
+          udls={[{ intensity: udlIntensity, start: udlStart, end: udlEnd }]}
+        />
       </div>
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
