@@ -57,12 +57,7 @@ export default function ShearStressProfile({ profile, sectionType, sectionParams
     <div className="rounded-lg border border-gray-200 bg-white p-4 shrink-0">
       <h3 className="mb-1 font-semibold text-gray-800">Cross-Section &amp; Shear Stress Profile</h3>
       <p className="mb-2 text-xs text-gray-500">at governing section x = {x_governing.toFixed(2)} m</p>
-      {sectionType === 'channel' && (
-        <p className="mb-2 text-xs text-gray-400">
-          (modeled as a symmetric I-section for bending -- the open side doesn't affect vertical bending behavior)
-        </p>
-      )}
-
+      
       <div className="flex items-start">
         <svg width={SECTION_WIDTH} height={HEIGHT} viewBox={`0 0 ${SECTION_WIDTH} ${HEIGHT}`}>
           <line

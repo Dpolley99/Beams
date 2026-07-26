@@ -121,8 +121,6 @@ export default function BeamForm({ onSolved }: Props) {
               step={0.001}
             />
           ))}
-
-          <CrossSectionPreview sectionType={sectionType} sectionParams={sectionParams} />
         </fieldset>
 
         <fieldset className="space-y-3">
@@ -131,14 +129,21 @@ export default function BeamForm({ onSolved }: Props) {
         </fieldset>
       </div>
 
-      <div className="mt-6">
-        <BeamPreview
-          length={length}
-          supportA={supportA}
-          supportB={supportB}
-          pointLoads={[{ magnitude: loadMagnitude, position: loadPosition }]}
-          udls={[{ intensity: udlIntensity, start: udlStart, end: udlEnd }]}
-        />
+      <div className="mt-6 flex flex-nowrap gap-4 overflow-x-auto pb-2">
+        <div className="min-w-\[420px]\ flex-1">
+          <BeamPreview
+            length={length}
+            supportA={supportA}
+            supportB={supportB}
+            pointLoads={[{ magnitude: loadMagnitude, position: loadPosition }]}
+            udls={[{ intensity: udlIntensity, start: udlStart, end: udlEnd }]}
+            sectionType={sectionType}
+            sectionParams={sectionParams}
+          />
+        </div>
+        <div className="shrink-0">
+          <CrossSectionPreview sectionType={sectionType} sectionParams={sectionParams} />
+        </div>
       </div>
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}

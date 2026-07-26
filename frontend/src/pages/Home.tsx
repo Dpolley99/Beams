@@ -44,11 +44,6 @@ export default function Home() {
         <p className="text-gray-500">Fill in the form and solve to see results.</p>
       ) : (
         <div className="space-y-6">
-          {/* Top row: load diagram + shear stress profile, side by
-              side. flex-nowrap + overflow-x-auto guarantees these
-              never wrap onto separate lines -- if the viewport is too
-              narrow to fit both, this row scrolls horizontally on its
-              own instead of breaking the layout. */}
           <div className="flex flex-nowrap gap-6 overflow-x-auto pb-2">
             <LoadDiagram
               length={request.length}
