@@ -44,11 +44,6 @@ export default function Home() {
         <p className="text-gray-500">Fill in the form and solve to see results.</p>
       ) : (
         <div className="space-y-6">
-          {/* Top row: load diagram + shear stress profile, side by
-              side. flex-nowrap + overflow-x-auto guarantees these
-              never wrap onto separate lines -- if the viewport is too
-              narrow to fit both, this row scrolls horizontally on its
-              own instead of breaking the layout. */}
           <div className="flex flex-nowrap gap-6 overflow-x-auto pb-2">
             <LoadDiagram
               length={request.length}
@@ -110,17 +105,6 @@ export default function Home() {
 
           <CurveChart
             x={result.curves.x}
-            y={result.curves.deflection}
-            yScale={1000}
-            color="#0891b2"
-            title="Deflection Diagram"
-            yLabel="y(x) [mm]"
-            valueSuffix=" mm"
-            governingPoint={{ x: result.governing.max_deflection.x, value: result.governing.max_deflection.value }}
-          />
-
-          <CurveChart
-            x={result.curves.x}
             y={result.curves.von_mises}
             yScale={1e-6}
             color="#65a30d"
@@ -130,12 +114,24 @@ export default function Home() {
             governingPoint={{ x: result.governing.max_von_mises.x, value: result.governing.max_von_mises.value }}
           />
 
+          <CurveChart
+            x={result.curves.x}
+            y={result.curves.deflection}
+            yScale={1000}
+            color="#0891b2"
+            title="Deflection Diagram"
+            yLabel="y(x) [mm]"
+            valueSuffix=" mm"
+            governingPoint={{ x: result.governing.max_deflection.x, value: result.governing.max_deflection.value }}
+          />
+
           <div className="rounded-lg border border-gray-200 p-4 text-sm">
             <h3 className="mb-2 font-semibold text-gray-800">Summary</h3>
             <p>R_a = {result.reactions.a.toFixed(1)} N, R_b = {result.reactions.b.toFixed(1)} N</p>
-            <p>Max moment: {result.governing.max_moment.value.toFixed(1)} N.m (x={result.governing.max_moment.x.toFixed(2)} m)</p>
             <p>Max shear: {result.governing.max_shear.value.toFixed(1)} N (x={result.governing.max_shear.x.toFixed(2)} m)</p>
+            <p>Max moment: {result.governing.max_moment.value.toFixed(1)} N.m (x={result.governing.max_moment.x.toFixed(2)} m)</p>
             <p>Max von Mises: {(result.governing.max_von_mises.value / 1e6).toFixed(2)} MPa (x={result.governing.max_von_mises.x.toFixed(2)} m)</p>
+            <p>Max Shear Stress: {(result.governing.max_shear_stress.value / 1e6).toFixed(2)} MPa (x={result.governing.max_shear_stress.y.toFixed(2)} m)</p>
             <p>Max deflection: {(result.governing.max_deflection.value * 1000).toFixed(2)} mm (x={result.governing.max_deflection.x.toFixed(2)} m)</p>
           </div>
         </div>
