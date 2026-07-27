@@ -1,5 +1,6 @@
-import type { PointLoadInput, UDLInput } from '../types'
-import { PointLoadArrow, UDLArrows, Support } from './BeamDiagramShapes'
+import type { PointLoadInput, DistributedLoadInput } from '../types'
+import { PointLoadArrow, DistributedLoadArrows, Support } from './BeamDiagramShapes'
+import { colorForIndex } from '../Loadcolors'
 
 interface Props {
   length: number
@@ -8,7 +9,7 @@ interface Props {
   reactionA: number
   reactionB: number
   pointLoads: PointLoadInput[]
-  udls: UDLInput[]
+  distributedLoads: DistributedLoadInput[]
 }
 
 // Fixed pixel coordinate space, matching CurveChart's own fixed
@@ -18,6 +19,8 @@ const WIDTH = 600
 const HEIGHT = 260
 const MARGIN = 30
 const BEAM_Y = 110
+const MAX_POINT_LOAD_PX = 60
+const MAX_DISTRIBUTED_PX = 30
 
 export default function LoadDiagram({
   length,
@@ -26,10 +29,21 @@ export default function LoadDiagram({
   reactionA,
   reactionB,
   pointLoads,
-  udls,
+  distributedLoads,
 }: Props) {
   const usableWidth = WIDTH - 2 * MARGIN
   const xScale = (pos: number) => MARGIN + (pos / length) * usableWidth
+
+  // Each category scales independently: point loads are proportional
+  // ONLY to other point loads, distributed loads ONLY to other
+  // distributed loads -- a 600N and 650N point load look close in
+  // height to each other, regardless of what any distributed load's
+  // intensity happens to be.
+  const maxPointMagnitude = Math.max(0, ...pointLoads.map((p) => Math.abs(p.magnitude)))
+  const maxDistIntensity = Math.max(
+    0,
+    ...distributedLoads.flatMap((d) => [Math.abs(d.start_intensity), Math.abs(d.end_intensity)])
+  )
 
   return (
     <div className="rounded-lg border border-gray-200 p-4 shrink-0">
@@ -37,12 +51,31 @@ export default function LoadDiagram({
       <svg width={WIDTH} height={HEIGHT} viewBox={`0 0 ${WIDTH} ${HEIGHT}`}>
         <line x1={xScale(0)} y1={BEAM_Y} x2={xScale(length)} y2={BEAM_Y} stroke="black" strokeWidth={4} />
 
-        {pointLoads.map((load, i) => (
-          <PointLoadArrow key={i} x={xScale(load.position)} magnitude={load.magnitude} beamTopY={BEAM_Y} />
-        ))}
+        {pointLoads.map((load, i) => {
+          const heightPx = maxPointMagnitude > 0 ? (Math.abs(load.magnitude) / maxPointMagnitude) * MAX_POINT_LOAD_PX : 0
+          return (
+            <PointLoadArrow
+              key={i}
+              x={xScale(load.position)}
+              magnitude={load.magnitude}
+              beamTopY={BEAM_Y}
+              heightPx={heightPx}
+              color={colorForIndex(i)}
+            />
+          )
+        })}
 
-        {udls.map((udl, i) => (
-          <UDLArrows key={i} xStart={xScale(udl.start)} xEnd={xScale(udl.end)} intensity={udl.intensity} beamTopY={BEAM_Y} />
+        {distributedLoads.map((dl, i) => (
+          <DistributedLoadArrows
+            key={i}
+            xStart={xScale(dl.start)}
+            xEnd={xScale(dl.end)}
+            startIntensity={dl.start_intensity}
+            endIntensity={dl.end_intensity}
+            maxIntensity={maxDistIntensity}
+            beamTopY={BEAM_Y}
+            color={colorForIndex(i)}
+          />
         ))}
 
         <Support x={xScale(supportA)} reaction={reactionA} type="pinned" beamBottomY={BEAM_Y} />

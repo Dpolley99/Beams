@@ -9,7 +9,7 @@ without needing a running web server (or even FastAPI installed).
 """
 
 from beam import Beam
-from loads import PointLoad, UDL
+from loads import PointLoad, DistributedLoad
 from cross_sections import rectangle, hollow_rectangle, circle, hollow_circle, channel, i_section, t_section
 from stress import bending_stress, max_shear_stress, max_von_mises_stress, shear_stress_profile
 
@@ -35,7 +35,8 @@ def solve_beam(payload, n_points=400):
     payload = {
       "length": float, "support_a": float, "support_b": float,
       "point_loads": [{"magnitude": float, "position": float}, ...],
-      "udls": [{"intensity": float, "start": float, "end": float}, ...],
+      "distributed_loads": [{"start": float, "end": float,
+                              "start_intensity": float, "end_intensity": float}, ...],
       "section_type": str, "section_params": {...},
       "E": float
     }
@@ -47,8 +48,11 @@ def solve_beam(payload, n_points=400):
     beam = Beam(length=payload["length"], support_a=payload["support_a"], support_b=payload["support_b"])
     for pl in payload.get("point_loads", []):
         beam.add_load(PointLoad(magnitude=pl["magnitude"], position=pl["position"]))
-    for udl in payload.get("udls", []):
-        beam.add_load(UDL(intensity=udl["intensity"], start=udl["start"], end=udl["end"]))
+    for dl in payload.get("distributed_loads", []):
+        beam.add_load(DistributedLoad(
+            start=dl["start"], end=dl["end"],
+            start_intensity=dl["start_intensity"], end_intensity=dl["end_intensity"],
+        ))
 
     r_a, r_b = beam.solve_reactions()
     beam.solve()

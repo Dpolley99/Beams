@@ -8,10 +8,11 @@ export interface PointLoadInput {
   position: number
 }
 
-export interface UDLInput {
-  intensity: number
+export interface DistributedLoadInput {
   start: number
   end: number
+  start_intensity: number
+  end_intensity: number
 }
 
 export interface BeamRequest {
@@ -19,7 +20,7 @@ export interface BeamRequest {
   support_a: number
   support_b: number
   point_loads: PointLoadInput[]
-  udls: UDLInput[]
+  distributed_loads: DistributedLoadInput[]
   section_type: string
   section_params: Record<string, number>
   E: number

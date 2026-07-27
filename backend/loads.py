@@ -1,16 +1,14 @@
 """
 loads.py
 
-STEP 1: Define the data we'll work with.
+Defines the load types a beam can carry.
 
-This is version 1 of the beam solver -- everything here uses fixed
-values written directly into the code. A later version will replace
-these with values the user types in.
-
-Right now, we just need a way to describe the two kinds of loads a
-beam can carry: a single point load, and a distributed load spread
-over a length. We use Python's @dataclass -- a quick way to define
-"a box with a few labeled compartments," nothing more.
+DistributedLoad generalizes what used to be a separate UDL class: a
+plain UDL is just the special case start_intensity == end_intensity.
+Unifying them means the solver only needs ONE code path for
+distributed loads (linear-in-x), instead of maintaining a constant-
+intensity case and a linearly-varying case as separate, duplicated
+logic.
 """
 
 from dataclasses import dataclass
@@ -23,8 +21,8 @@ class PointLoad:
 
 
 @dataclass
-class UDL:  # "Uniformly Distributed Load" -- like the weight of the
-            # beam itself, spread evenly over some length
-    intensity: float   # force per meter (downward = positive)
-    start: float        # where the distributed load begins
-    end: float           # where it ends
+class DistributedLoad:
+    start: float             # where the distributed load begins
+    end: float               # where it ends
+    start_intensity: float   # force per meter at x=start (downward = positive)
+    end_intensity: float     # force per meter at x=end -- equal to start_intensity for a plain UDL

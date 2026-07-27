@@ -5,10 +5,16 @@ Solves for reactions, then builds V(x) and M(x) as piecewise
 expressions. Also identifies every engineering-significant point:
 supports, loads, and local extrema of the bending moment (found from
 V(x) = 0, since dM/dx = V).
+
+Distributed loads are now linear-in-x (DistributedLoad has independent
+start/end intensities -- a plain UDL is just the case where they're
+equal), so within a segment, the total distributed load intensity is
+w(xi) = w0 + k*xi (not just a constant) -- this makes V(x) quadratic
+and M(x) cubic per segment, generalizing the earlier constant-w case.
 """
 
 import sympy as sp
-from loads import PointLoad, UDL
+from loads import PointLoad, DistributedLoad
 
 x = sp.symbols('x', real=True)
 
@@ -32,12 +38,22 @@ class Beam:
             if isinstance(load, PointLoad):
                 total_downward_force += load.magnitude
                 total_moment_about_a += load.magnitude * (load.position - a)
-            elif isinstance(load, UDL):
+            elif isinstance(load, DistributedLoad):
                 length = load.end - load.start
-                resultant = load.intensity * length
-                centroid = (load.start + load.end) / 2
+                w1, w2 = load.start_intensity, load.end_intensity
+                resultant = (w1 + w2) / 2 * length
+                # Moment about 'a', found by DIRECT integration rather
+                # than resultant*centroid -- the resultant*centroid
+                # shortcut divides by the resultant, which breaks when
+                # the resultant is zero but the moment genuinely isn't
+                # (e.g. an antisymmetric ramp load from +w to -w).
+                # Derivation: with s = x-load.start (0..length),
+                # w(s) = w1 + (w2-w1)/length*s, and
+                # moment_about_a = (load.start - a)*resultant
+                #                  + length^2*(w1 + 2*w2)/6
+                moment_about_a = (load.start - a) * resultant + length**2 * (w1 + 2 * w2) / 6
                 total_downward_force += resultant
-                total_moment_about_a += resultant * (centroid - a)
+                total_moment_about_a += moment_about_a
 
         r_b = total_moment_about_a / (b - a)
         r_a = total_downward_force - r_b
@@ -50,10 +66,27 @@ class Beam:
         for load in self.loads:
             if isinstance(load, PointLoad):
                 pts.add(load.position)
-            elif isinstance(load, UDL):
+            elif isinstance(load, DistributedLoad):
                 pts.add(load.start)
                 pts.add(load.end)
         return sorted(pts)
+
+    def _distributed_load_at_segment(self, seg_start, seg_end):
+        """Sums every active DistributedLoad's contribution across this
+        segment into ONE combined linear function w(xi) = w0 + k*xi
+        (xi measured from seg_start) -- superposition holds since
+        integration is linear, so multiple overlapping distributed
+        loads just add together."""
+        w0, k = 0.0, 0.0
+        for load in self.loads:
+            if isinstance(load, DistributedLoad) and load.start <= seg_start and load.end >= seg_end:
+                span = load.end - load.start
+                slope = (load.end_intensity - load.start_intensity) / span
+                # this load's own intensity exactly AT seg_start
+                w_at_seg_start = load.start_intensity + slope * (seg_start - load.start)
+                w0 += w_at_seg_start
+                k += slope
+        return w0, k
 
     def solve(self):
         if not hasattr(self, 'reaction_a'):
@@ -82,21 +115,18 @@ class Beam:
             m_start += dM
             self.point_values[seg_start] = {'V_left': v_left, 'V_right': v_start, 'M': m_start}
 
-            w_active = 0.0
-            for load in self.loads:
-                if isinstance(load, UDL) and load.start <= seg_start and load.end >= seg_end:
-                    w_active += load.intensity
+            w0, k = self._distributed_load_at_segment(seg_start, seg_end)
 
             xi = x - seg_start
-            v_expr = v_start - w_active * xi
-            m_expr = m_start + v_start * xi - w_active * xi**2 / 2
+            v_expr = v_start - w0 * xi - k * xi**2 / 2
+            m_expr = m_start + v_start * xi - w0 * xi**2 / 2 - k * xi**3 / 6
 
             is_last = (seg_end == crit[-1])
             cond = sp.And(x >= seg_start, x <= seg_end) if is_last else sp.And(x >= seg_start, x < seg_end)
             v_pieces.append((sp.nsimplify(v_expr), cond))
             m_pieces.append((sp.nsimplify(m_expr), cond))
 
-            self._segments.append({'start': seg_start, 'end': seg_end, 'v_start': v_start, 'w': w_active})
+            self._segments.append({'start': seg_start, 'end': seg_end, 'v_start': v_start, 'w0': w0, 'k': k})
 
             v_start = float(v_expr.subs(x, seg_end))
             m_start = float(m_expr.subs(x, seg_end))
@@ -115,24 +145,42 @@ class Beam:
         return float(self.M.subs(x, xv))
 
     def zero_shear_points(self):
-        """x-positions strictly INSIDE a segment where V(x) = 0 exactly
-        (V is linear per segment, so this is an exact algebraic root,
-        not a numerical approximation). These are candidate locations
-        for a local max/min of the bending moment."""
+        """x-positions strictly INSIDE a segment where V(x) = 0.
+
+        V(xi) = v_start - w0*xi - k*xi^2/2, which is LINEAR when k=0
+        (a plain UDL or no distributed load active) and QUADRATIC
+        when k!=0 (a varying/trapezoidal load) -- a quadratic can have
+        0, 1, or 2 roots inside one segment (the shear can cross zero
+        twice under a tapering load), so both are found and checked."""
         roots = []
         for seg in self._segments:
-            w = seg['w']
-            if w != 0:
-                xi_root = seg['v_start'] / w
-                seg_len = seg['end'] - seg['start']
+            w0, k = seg['w0'], seg['k']
+            v_start = seg['v_start']
+            seg_len = seg['end'] - seg['start']
+
+            if k == 0:
+                if w0 != 0:
+                    xi_root = v_start / w0
+                    if 0 < xi_root < seg_len:
+                        roots.append(seg['start'] + xi_root)
+                continue
+
+            # (k/2)*xi^2 + w0*xi - v_start = 0  ->  k*xi^2 + 2*w0*xi - 2*v_start = 0
+            discriminant = (2 * w0)**2 - 4 * k * (-2 * v_start)
+            if discriminant < 0:
+                continue
+            sqrt_d = discriminant**0.5
+            for sign in (1, -1):
+                xi_root = (-2 * w0 + sign * sqrt_d) / (2 * k)
                 if 0 < xi_root < seg_len:
                     roots.append(seg['start'] + xi_root)
         return roots
 
     def key_points_report(self):
         """One row per engineering-significant point: every support,
-        every load position, every UDL start/end, and every interior
-        V=0 point -- with V (left/right of any jump) and M at each."""
+        every load position, every distributed load start/end, and
+        every interior V=0 point -- with V (left/right of any jump)
+        and M at each."""
         labels = {}
 
         def add_label(pos, text):
@@ -145,9 +193,10 @@ class Beam:
         for load in self.loads:
             if isinstance(load, PointLoad):
                 add_label(load.position, "Point load")
-            elif isinstance(load, UDL):
-                add_label(load.start, "UDL start")
-                add_label(load.end, "UDL end")
+            elif isinstance(load, DistributedLoad):
+                kind = "UDL" if load.start_intensity == load.end_intensity else "Varying distributed load"
+                add_label(load.start, f"{kind} start")
+                add_label(load.end, f"{kind} end")
 
         zero_shear = self.zero_shear_points()
         for xr in zero_shear:
@@ -216,11 +265,11 @@ class Beam:
 
         for seg in self._segments:
             seg_start, seg_end = seg['start'], seg['end']
-            v_start, w_active = seg['v_start'], seg['w']
+            v_start, w0, k = seg['v_start'], seg['w0'], seg['k']
             m_start = self.point_values[seg_start]['M']
 
             xi = x - seg_start
-            m_expr = m_start + v_start * xi - w_active * xi**2 / 2
+            m_expr = m_start + v_start * xi - w0 * xi**2 / 2 - k * xi**3 / 6
 
             # indefinite-integrate, then subtract the value at
             # seg_start -- gives the definite integral from seg_start

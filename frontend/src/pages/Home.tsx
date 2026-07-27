@@ -52,7 +52,7 @@ export default function Home() {
               reactionA={result.reactions.a}
               reactionB={result.reactions.b}
               pointLoads={request.point_loads}
-              udls={request.udls}
+              distributedLoads={request.distributed_loads}
             />
             <ShearStressProfile
               profile={result.shear_profile}

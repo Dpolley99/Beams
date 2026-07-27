@@ -25,10 +25,11 @@ class PointLoadIn(BaseModel):
     position: float
 
 
-class UDLIn(BaseModel):
-    intensity: float
+class DistributedLoadIn(BaseModel):
     start: float
     end: float
+    start_intensity: float
+    end_intensity: float
 
 
 class BeamRequest(BaseModel):
@@ -36,7 +37,7 @@ class BeamRequest(BaseModel):
     support_a: float
     support_b: float
     point_loads: List[PointLoadIn] = []
-    udls: List[UDLIn] = []
+    distributed_loads: List[DistributedLoadIn] = []
     section_type: str
     section_params: Dict[str, float]
     E: float

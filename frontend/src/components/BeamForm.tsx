@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import type { FormEvent } from 'react'
 import type { BeamRequest, BeamResult } from '../types'
 import { solveBeam } from '../api'
@@ -10,24 +10,36 @@ interface Props {
   onSolved: (request: BeamRequest, result: BeamResult) => void
 }
 
-// Starter scope: ONE point load + ONE UDL. Section type is fully
-// selectable (see sectionTypes.ts). Multiple loads (add/remove) is
-// the next natural extension, following the same
-// backend-already-supports-it pattern.
-//
-// Layout: fieldsets sit in a responsive grid (side by side on wide
-// screens, wrapping on narrow ones) so the whole form reads as one
-// horizontal "setup bar" across the top, rather than a tall stacked
-// sidebar.
+interface PointLoadEntry {
+  id: string
+  magnitude: number
+  position: number
+}
+
+interface DistributedLoadEntry {
+  id: string
+  start: number
+  end: number
+  startIntensity: number
+  endIntensity: number
+  isVarying: boolean // false = plain UDL (start/end intensity always kept equal), true = varying/trapezoidal
+}
+
+// Loads start EMPTY -- the user builds up the load case by adding
+// point loads and distributed loads one at a time, removing any of
+// them freely. A distributed load's UDL/Varying toggle keeps
+// start/end intensity forced equal while in UDL mode (see
+// toggleVarying and updateUniformIntensity below), so there's no way
+// for a "uniform" load to silently end up with mismatched ends.
 export default function BeamForm({ onSolved }: Props) {
   const [length, setLength] = useState(16)
   const [supportA, setSupportA] = useState(2)
   const [supportB, setSupportB] = useState(10)
-  const [loadMagnitude, setLoadMagnitude] = useState(3000)
-  const [loadPosition, setLoadPosition] = useState(7)
-  const [udlIntensity, setUdlIntensity] = useState(150)
-  const [udlStart, setUdlStart] = useState(5)
-  const [udlEnd, setUdlEnd] = useState(11)
+
+  const [pointLoads, setPointLoads] = useState<PointLoadEntry[]>([])
+  const [distributedLoads, setDistributedLoads] = useState<DistributedLoadEntry[]>([])
+  const nextId = useRef(0)
+  const newId = () => `load-${nextId.current++}`
 
   const [sectionType, setSectionType] = useState('rectangle')
   const [sectionParams, setSectionParams] = useState<Record<string, number>>(defaultParamsFor('rectangle'))
@@ -46,6 +58,54 @@ export default function BeamForm({ onSolved }: Props) {
     setSectionParams((prev) => ({ ...prev, [key]: value }))
   }
 
+  function addPointLoad() {
+    setPointLoads((prev) => [...prev, { id: newId(), magnitude: 1000, position: length / 2 }])
+  }
+
+  function removePointLoad(id: string) {
+    setPointLoads((prev) => prev.filter((p) => p.id !== id))
+  }
+
+  function updatePointLoad(id: string, patch: Partial<PointLoadEntry>) {
+    setPointLoads((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)))
+  }
+
+  function addDistributedLoad() {
+    setDistributedLoads((prev) => [
+      ...prev,
+      { id: newId(), start: 0, end: length, startIntensity: 100, endIntensity: 100, isVarying: false },
+    ])
+  }
+
+  function removeDistributedLoad(id: string) {
+    setDistributedLoads((prev) => prev.filter((d) => d.id !== id))
+  }
+
+  function updateDistributedLoad(id: string, patch: Partial<DistributedLoadEntry>) {
+    setDistributedLoads((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch } : d)))
+  }
+
+  // While in UDL mode, the single "Intensity" field writes to BOTH
+  // startIntensity and endIntensity, so they can never drift apart.
+  function updateUniformIntensity(id: string, value: number) {
+    setDistributedLoads((prev) => prev.map((d) => (d.id === id ? { ...d, startIntensity: value, endIntensity: value } : d)))
+  }
+
+  function toggleVarying(id: string) {
+    setDistributedLoads((prev) =>
+      prev.map((d) => {
+        if (d.id !== id) return d
+        if (d.isVarying) {
+          // switching back to uniform: collapse to the start value,
+          // don't average or leave the old end value stale
+          return { ...d, isVarying: false, endIntensity: d.startIntensity }
+        }
+        // switching to varying: both fields already match, just unlock the second one
+        return { ...d, isVarying: true }
+      })
+    )
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setLoading(true)
@@ -55,8 +115,16 @@ export default function BeamForm({ onSolved }: Props) {
       length,
       support_a: supportA,
       support_b: supportB,
-      point_loads: [{ magnitude: loadMagnitude, position: loadPosition }],
-      udls: [{ intensity: udlIntensity, start: udlStart, end: udlEnd }],
+      point_loads: pointLoads.map((p) => ({ magnitude: p.magnitude, position: p.position })),
+      distributed_loads: distributedLoads.map((d) => ({
+        start: d.start,
+        end: d.end,
+        start_intensity: d.startIntensity,
+        // safety net: force equality for UDL regardless of state
+        // history, so a future UI bug can never send a "uniform" load
+        // with mismatched ends
+        end_intensity: d.isVarying ? d.endIntensity : d.startIntensity,
+      })),
       section_type: sectionType,
       section_params: sectionParams,
       E: youngsModulus,
@@ -83,16 +151,69 @@ export default function BeamForm({ onSolved }: Props) {
         </fieldset>
 
         <fieldset className="space-y-3">
-          <legend className="font-semibold text-gray-800">Point load</legend>
-          <NumberField label="Magnitude (N)" value={loadMagnitude} onChange={setLoadMagnitude} />
-          <NumberField label="Position (m)" value={loadPosition} onChange={setLoadPosition} />
+          <legend className="font-semibold text-gray-800">Point loads</legend>
+          {pointLoads.map((pl, idx) => (
+            <div key={pl.id} className="space-y-2 rounded border border-gray-200 p-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-gray-500">Load {idx + 1}</span>
+                <button type="button" onClick={() => removePointLoad(pl.id)} className="text-xs text-red-600 hover:text-red-800">
+                  Remove
+                </button>
+              </div>
+              <NumberField label="Magnitude (N)" value={pl.magnitude} onChange={(v) => updatePointLoad(pl.id, { magnitude: v })} />
+              <NumberField label="Position (m)" value={pl.position} onChange={(v) => updatePointLoad(pl.id, { position: v })} />
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addPointLoad}
+            className="w-full rounded-md border border-dashed border-gray-300 py-1.5 text-sm text-gray-600 hover:border-blue-400 hover:text-blue-600"
+          >
+            + Add point load
+          </button>
         </fieldset>
 
         <fieldset className="space-y-3">
-          <legend className="font-semibold text-gray-800">UDL</legend>
-          <NumberField label="Intensity (N/m)" value={udlIntensity} onChange={setUdlIntensity} />
-          <NumberField label="Start (m)" value={udlStart} onChange={setUdlStart} />
-          <NumberField label="End (m)" value={udlEnd} onChange={setUdlEnd} />
+          <legend className="font-semibold text-gray-800">Distributed loads</legend>
+          {distributedLoads.map((dl, idx) => (
+            <div key={dl.id} className="space-y-2 rounded border border-gray-200 p-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-gray-500">Load {idx + 1}</span>
+                <button type="button" onClick={() => removeDistributedLoad(dl.id)} className="text-xs text-red-600 hover:text-red-800">
+                  Remove
+                </button>
+              </div>
+              <NumberField label="Start (m)" value={dl.start} onChange={(v) => updateDistributedLoad(dl.id, { start: v })} />
+              <NumberField label="End (m)" value={dl.end} onChange={(v) => updateDistributedLoad(dl.id, { end: v })} />
+              <label className="flex items-center gap-2 text-xs text-gray-600">
+                <input type="checkbox" checked={dl.isVarying} onChange={() => toggleVarying(dl.id)} />
+                Varying (start/end intensity differ)
+              </label>
+              {dl.isVarying ? (
+                <>
+                  <NumberField
+                    label="Start intensity (N/m)"
+                    value={dl.startIntensity}
+                    onChange={(v) => updateDistributedLoad(dl.id, { startIntensity: v })}
+                  />
+                  <NumberField
+                    label="End intensity (N/m)"
+                    value={dl.endIntensity}
+                    onChange={(v) => updateDistributedLoad(dl.id, { endIntensity: v })}
+                  />
+                </>
+              ) : (
+                <NumberField label="Intensity (N/m)" value={dl.startIntensity} onChange={(v) => updateUniformIntensity(dl.id, v)} />
+              )}
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addDistributedLoad}
+            className="w-full rounded-md border border-dashed border-gray-300 py-1.5 text-sm text-gray-600 hover:border-blue-400 hover:text-blue-600"
+          >
+            + Add distributed load
+          </button>
         </fieldset>
 
         <fieldset className="space-y-3">
@@ -130,13 +251,18 @@ export default function BeamForm({ onSolved }: Props) {
       </div>
 
       <div className="mt-6 flex flex-nowrap gap-4 overflow-x-auto pb-2">
-        <div className="min-w-\[420px]\ flex-1">
+        <div className="min-w-/[420px]/ flex-1">
           <BeamPreview
             length={length}
             supportA={supportA}
             supportB={supportB}
-            pointLoads={[{ magnitude: loadMagnitude, position: loadPosition }]}
-            udls={[{ intensity: udlIntensity, start: udlStart, end: udlEnd }]}
+            pointLoads={pointLoads.map((p) => ({ magnitude: p.magnitude, position: p.position }))}
+            distributedLoads={distributedLoads.map((d) => ({
+              start: d.start,
+              end: d.end,
+              start_intensity: d.startIntensity,
+              end_intensity: d.isVarying ? d.endIntensity : d.startIntensity,
+            }))}
             sectionType={sectionType}
             sectionParams={sectionParams}
           />
