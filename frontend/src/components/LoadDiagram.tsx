@@ -10,6 +10,8 @@ interface Props {
   reactionB: number
   pointLoads: PointLoadInput[]
   distributedLoads: DistributedLoadInput[]
+  forceUnit: string
+  intensityUnit: string
 }
 
 // Fixed pixel coordinate space, matching CurveChart's own fixed
@@ -30,6 +32,8 @@ export default function LoadDiagram({
   reactionB,
   pointLoads,
   distributedLoads,
+  forceUnit,
+  intensityUnit,
 }: Props) {
   const usableWidth = WIDTH - 2 * MARGIN
   const xScale = (pos: number) => MARGIN + (pos / length) * usableWidth
@@ -61,6 +65,7 @@ export default function LoadDiagram({
               beamTopY={BEAM_Y}
               heightPx={heightPx}
               color={colorForIndex(i)}
+              unit={forceUnit}
             />
           )
         })}
@@ -75,11 +80,12 @@ export default function LoadDiagram({
             maxIntensity={maxDistIntensity}
             beamTopY={BEAM_Y}
             color={colorForIndex(i)}
+            unit={intensityUnit}
           />
         ))}
 
-        <Support x={xScale(supportA)} reaction={reactionA} type="pinned" beamBottomY={BEAM_Y} />
-        <Support x={xScale(supportB)} reaction={reactionB} type="roller" beamBottomY={BEAM_Y} />
+        <Support x={xScale(supportA)} reaction={reactionA} type="pinned" beamBottomY={BEAM_Y} unit={forceUnit} />
+        <Support x={xScale(supportB)} reaction={reactionB} type="roller" beamBottomY={BEAM_Y} unit={forceUnit} />
       </svg>
     </div>
   )

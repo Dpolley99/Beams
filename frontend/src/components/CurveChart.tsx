@@ -20,6 +20,7 @@ interface CurveChartProps {
   color: string
   title: string
   yLabel: string
+  xLabel?: string // e.g. 'Position along beam (mm)' -- defaults to meters
   yScale?: number // multiply y by this before plotting, e.g. 1e-6 for Pa->MPa
   valueSuffix?: string
   keyPoints?: Marker[]
@@ -41,6 +42,7 @@ export default function CurveChart({
   color,
   title,
   yLabel,
+  xLabel = 'Position along beam (m)',
   yScale = 1,
   valueSuffix = '',
   keyPoints = [],
@@ -57,16 +59,19 @@ export default function CurveChart({
           dataKey="x"
           type="number"
           domain={['dataMin', 'dataMax']}
-          label={{ value: 'Position along beam (m)', position: 'insideBottom', offset: -5 }}
+          label={{ value: xLabel, position: 'insideBottom', offset: -5 }}
         />
         <YAxis label={{ value: yLabel, angle: -90, position: 'insideLeft' }} />
         <Tooltip
-          formatter={(value: number) => `${value.toFixed(2)}${valueSuffix}`}
-          labelFormatter={(xv) => `x = ${Number(xv).toFixed(2)} m`}
+          formatter={(value) => {
+            const numericValue = typeof value === 'number' ? value : Number(value ?? 0)
+            return `${numericValue.toFixed(2)}${valueSuffix}`
+          }}
+          labelFormatter={(xv) => `x = ${Number(xv).toFixed(2)}`}
         />
         <ReferenceLine y={0} stroke="#000" />
         {keyPoints.map((kp, i) => (
-          <ReferenceDot key={i} x={kp.x} y={kp.value * yScale} r={4} fill={color} stroke="none" isFront />
+          <ReferenceDot key={i} x={kp.x} y={kp.value * yScale} r={4} fill={color} stroke="none" />
         ))}
         {governingPoint && (
           <ReferenceDot
@@ -76,7 +81,6 @@ export default function CurveChart({
             fill="#dc2626"
             stroke="#fff"
             strokeWidth={1}
-            isFront
           />
         )}
         <Line type="monotone" dataKey="y" stroke={color} dot={false} strokeWidth={2} />

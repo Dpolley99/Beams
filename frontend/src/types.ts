@@ -15,6 +15,19 @@ export interface DistributedLoadInput {
   end_intensity: number
 }
 
+// Governs both input parsing and output display for each category --
+// e.g. choosing length='mm' means positions are typed in mm AND read
+// back in mm. E is always GPa, no unit choice, per instruction --
+// intentionally not included here.
+export interface Units {
+  length: 'm' | 'mm'
+  section_length: 'm' | 'mm'
+  force: 'N' | 'kN'
+  intensity: 'N/m' | 'kN/m' | 'N/mm' | 'kN/mm'
+  moment: 'N.m' | 'kN.m' | 'N.mm' | 'kN.mm'
+  deflection: 'm' | 'mm'
+}
+
 export interface BeamRequest {
   length: number
   support_a: number
@@ -23,7 +36,8 @@ export interface BeamRequest {
   distributed_loads: DistributedLoadInput[]
   section_type: string
   section_params: Record<string, number>
-  E: number
+  E: number // always GPa
+  units: Units
 }
 
 export interface Curves {
@@ -69,4 +83,5 @@ export interface BeamResult {
   governing: Governing
   shear_profile: ShearProfile
   section: Record<string, number>
+  units: Units
 }

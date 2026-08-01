@@ -22,37 +22,37 @@ export const SECTION_LABELS: Record<string, string> = {
 
 export const SECTION_FIELDS: Record<string, SectionField[]> = {
   rectangle: [
-    { key: 'b', label: 'Width b (m)', default: 0.1 },
-    { key: 'h', label: 'Height h (m)', default: 0.1 },
+    { key: 'b', label: 'Width b', default: 0.1 },
+    { key: 'h', label: 'Height h', default: 0.1 },
   ],
   hollow_rectangle: [
-    { key: 'b_out', label: 'Outer width b_out (m)', default: 0.12 },
-    { key: 'h_out', label: 'Outer height h_out (m)', default: 0.12 },
-    { key: 'b_in', label: 'Inner width b_in (m)', default: 0.08 },
-    { key: 'h_in', label: 'Inner height h_in (m)', default: 0.08 },
+    { key: 'b_out', label: 'Outer width b_out', default: 0.12 },
+    { key: 'h_out', label: 'Outer height h_out', default: 0.12 },
+    { key: 'b_in', label: 'Inner width b_in', default: 0.08 },
+    { key: 'h_in', label: 'Inner height h_in', default: 0.08 },
   ],
-  circle: [{ key: 'd', label: 'Diameter d (m)', default: 0.1 }],
+  circle: [{ key: 'd', label: 'Diameter d', default: 0.1 }],
   hollow_circle: [
-    { key: 'd_out', label: 'Outer diameter d_out (m)', default: 0.12 },
-    { key: 'd_in', label: 'Inner diameter d_in (m)', default: 0.08 },
+    { key: 'd_out', label: 'Outer diameter d_out', default: 0.12 },
+    { key: 'd_in', label: 'Inner diameter d_in', default: 0.08 },
   ],
   channel: [
-    { key: 'H', label: 'Overall height H (m)', default: 0.1 },
-    { key: 'B', label: 'Flange width B (m)', default: 0.06 },
-    { key: 'tw', label: 'Web thickness tw (m)', default: 0.008 },
-    { key: 'tf', label: 'Flange thickness tf (m)', default: 0.01 },
+    { key: 'H', label: 'Overall height H', default: 0.1 },
+    { key: 'B', label: 'Flange width B', default: 0.06 },
+    { key: 'tw', label: 'Web thickness tw', default: 0.008 },
+    { key: 'tf', label: 'Flange thickness tf', default: 0.01 },
   ],
   i_section: [
-    { key: 'H', label: 'Overall height H (m)', default: 0.1 },
-    { key: 'B', label: 'Flange width B (m)', default: 0.06 },
-    { key: 'tw', label: 'Web thickness tw (m)', default: 0.008 },
-    { key: 'tf', label: 'Flange thickness tf (m)', default: 0.01 },
+    { key: 'H', label: 'Overall height H', default: 0.1 },
+    { key: 'B', label: 'Flange width B', default: 0.06 },
+    { key: 'tw', label: 'Web thickness tw', default: 0.008 },
+    { key: 'tf', label: 'Flange thickness tf', default: 0.01 },
   ],
   t_section: [
-    { key: 'H', label: 'Overall height H (m)', default: 0.1 },
-    { key: 'B', label: 'Flange width B (m)', default: 0.06 },
-    { key: 'tw', label: 'Web thickness tw (m)', default: 0.008 },
-    { key: 'tf', label: 'Flange thickness tf (m)', default: 0.01 },
+    { key: 'H', label: 'Overall height H', default: 0.1 },
+    { key: 'B', label: 'Flange width B', default: 0.06 },
+    { key: 'tw', label: 'Web thickness tw', default: 0.008 },
+    { key: 'tf', label: 'Flange thickness tf', default: 0.01 },
   ],
 }
 

@@ -11,7 +11,7 @@ Run with:  uvicorn api:app --reload --port 8000
 Then visit http://localhost:8000/docs for interactive API docs.
 """
 
-from typing import List, Dict
+from typing import List, Dict, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,6 +32,25 @@ class DistributedLoadIn(BaseModel):
     end_intensity: float
 
 
+class UnitsIn(BaseModel):
+    """Governs BOTH input parsing and output display for each
+    category -- e.g. choosing length='mm' means positions are typed
+    in mm AND read back in mm. Young's Modulus is intentionally NOT
+    here -- it's always GPa, no unit choice, per instruction.
+
+    Defaults are a strict no-op (everything already in SI) so a
+    request that omits "units" entirely -- or omits some of its
+    fields -- behaves EXACTLY as it did before this feature existed.
+    Literal types mean FastAPI rejects an invalid unit string with a
+    clear 422 error, rather than silently mis-converting."""
+    length: Literal["m", "mm"] = "m"
+    section_length: Literal["m", "mm"] = "m"
+    force: Literal["N", "kN"] = "N"
+    intensity: Literal["N/m", "kN/m", "N/mm", "kN/mm"] = "N/m"
+    moment: Literal["N.m", "kN.m", "N.mm", "kN.mm"] = "N.m"
+    deflection: Literal["m", "mm"] = "m"
+
+
 class BeamRequest(BaseModel):
     length: float
     support_a: float
@@ -40,7 +59,8 @@ class BeamRequest(BaseModel):
     distributed_loads: List[DistributedLoadIn] = []
     section_type: str
     section_params: Dict[str, float]
-    E: float
+    E: float  # always GPa -- e.g. 200 for steel, not 200e9
+    units: UnitsIn = UnitsIn()
 
 
 app = FastAPI(title="Beam Solver API")

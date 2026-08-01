@@ -12,6 +12,9 @@ interface Props {
   distributedLoads: DistributedLoadInput[]
   sectionType: string
   sectionParams: Record<string, number>
+  forceUnit: string
+  intensityUnit: string
+  lengthUnit: string
 }
 
 // Live beam sketch inside the form -- updates as the user builds up
@@ -67,6 +70,9 @@ export default function BeamPreview({
   distributedLoads,
   sectionType,
   sectionParams,
+  forceUnit,
+  intensityUnit,
+  lengthUnit,
 }: Props) {
   const valid =
     Number.isFinite(length) &&
@@ -135,6 +141,7 @@ export default function BeamPreview({
               beamTopY={beamTopY}
               heightPx={heightPx}
               color={colorForIndex(i)}
+              unit={forceUnit}
             />
           )
         })}
@@ -149,6 +156,7 @@ export default function BeamPreview({
             maxIntensity={maxDistIntensity}
             beamTopY={beamTopY}
             color={colorForIndex(i)}
+            unit={intensityUnit}
           />
         ))}
 
@@ -166,7 +174,7 @@ export default function BeamPreview({
           const mid = (xScale(p) + xScale(next)) / 2
           return (
             <text key={`seg-${i}`} x={mid} y={DIM_LINE_Y + 18} textAnchor="middle" fontSize={11} fill="#6b7280">
-              {(next - p).toFixed(2)} m
+              {(next - p).toFixed(2)} {lengthUnit}
             </text>
           )
         })}

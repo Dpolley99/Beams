@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { BeamRequest, BeamResult } from '../types'
+import type { BeamRequest, BeamResult, Units } from '../types'
 import BeamForm from '../components/BeamForm'
 import LoadDiagram from '../components/LoadDiagram'
 import ShearStressProfile from '../components/ShearStressProfile'
@@ -21,6 +21,19 @@ function argMaxAbs(values: number[]): number {
   return values.reduce((best, v, i) => (Math.abs(v) > Math.abs(values[best]) ? i : best), 0)
 }
 
+// Defensive fallback ONLY -- with the backend fix restored, result.units
+// should always be present. Kept as a safety net so a malformed/older
+// response can't crash rendering, not as a substitute for the backend
+// actually sending units (that was the real bug -- see solver_service.py).
+const FALLBACK_UNITS: Units = {
+  length: 'm',
+  section_length: 'm',
+  force: 'N',
+  intensity: 'N/m',
+  moment: 'N.m',
+  deflection: 'mm',
+}
+
 export default function Home() {
   const [request, setRequest] = useState<BeamRequest | null>(null)
   const [result, setResult] = useState<BeamResult | null>(null)
@@ -31,6 +44,11 @@ export default function Home() {
   }
 
   const sigmaMaxIdx = result ? argMaxAbs(result.curves.sigma) : 0
+  // Read through this ONE variable everywhere below, not result.units
+  // directly -- that inconsistency (some spots using the safe fallback,
+  // others reaching into result.units raw) is exactly what was left
+  // over from the original patch.
+  const units = result?.units ?? FALLBACK_UNITS
 
   return (
     <div className="mx-auto max-w-7xl p-8">
@@ -53,6 +71,8 @@ export default function Home() {
               reactionB={result.reactions.b}
               pointLoads={request.point_loads}
               distributedLoads={request.distributed_loads}
+              forceUnit={units.force}
+              intensityUnit={units.intensity}
             />
             <ShearStressProfile
               profile={result.shear_profile}
@@ -62,13 +82,21 @@ export default function Home() {
             />
           </div>
 
+          {/* NOTE: the backend converts curves.x/V/M/deflection and
+              every governing value to whichever units were requested
+              (result.units) -- so nothing here is hardcoded to N/m/etc,
+              it all reads from the 'units' variable above.
+              sigma/von_mises stay Pa internally by design (stress is
+              always shown as MPa, no unit choice), so THOSE keep their
+              fixed 1e-6 scale. */}
           <CurveChart
             x={result.curves.x}
             y={result.curves.V}
             color="#2563eb"
             title="Shear Force Diagram (SFD)"
-            yLabel="V(x) [N]"
-            valueSuffix=" N"
+            yLabel={`V(x) [${units.force}]`}
+            xLabel={`Position along beam (${units.length})`}
+            valueSuffix={` ${units.force}`}
             keyPoints={result.key_points.flatMap((kp) =>
               kp.V_left === kp.V_right
                 ? [{ x: kp.x, value: kp.V_left }]
@@ -85,8 +113,9 @@ export default function Home() {
             y={result.curves.M}
             color="#dc2626"
             title="Bending Moment Diagram (BMD)"
-            yLabel="M(x) [N.m]"
-            valueSuffix=" N.m"
+            yLabel={`M(x) [${units.moment}]`}
+            xLabel={`Position along beam (${units.length})`}
+            valueSuffix={` ${units.moment}`}
             keyPoints={result.key_points.map((kp) => ({ x: kp.x, value: kp.M }))}
             governingPoint={{ x: result.governing.max_moment.x, value: result.governing.max_moment.value }}
           />
@@ -98,6 +127,7 @@ export default function Home() {
             color="#9333ea"
             title="Bending Stress Diagram"
             yLabel="sigma(x) [MPa]"
+            xLabel={`Position along beam (${units.length})`}
             valueSuffix=" MPa"
             keyPoints={result.key_points.map((kp) => ({ x: kp.x, value: bendingStressAt(kp.M, result.section) }))}
             governingPoint={{ x: result.curves.x[sigmaMaxIdx], value: result.curves.sigma[sigmaMaxIdx] }}
@@ -110,6 +140,7 @@ export default function Home() {
             color="#65a30d"
             title="von Mises Stress Diagram"
             yLabel="von Mises [MPa]"
+            xLabel={`Position along beam (${units.length})`}
             valueSuffix=" MPa"
             governingPoint={{ x: result.governing.max_von_mises.x, value: result.governing.max_von_mises.value }}
           />
@@ -117,22 +148,39 @@ export default function Home() {
           <CurveChart
             x={result.curves.x}
             y={result.curves.deflection}
-            yScale={1000}
             color="#0891b2"
             title="Deflection Diagram"
-            yLabel="y(x) [mm]"
-            valueSuffix=" mm"
+            yLabel={`y(x) [${units.deflection}]`}
+            xLabel={`Position along beam (${units.length})`}
+            valueSuffix={` ${units.deflection}`}
             governingPoint={{ x: result.governing.max_deflection.x, value: result.governing.max_deflection.value }}
           />
 
           <div className="rounded-lg border border-gray-200 p-4 text-sm">
             <h3 className="mb-2 font-semibold text-gray-800">Summary</h3>
-            <p>R_a = {result.reactions.a.toFixed(1)} N, R_b = {result.reactions.b.toFixed(1)} N</p>
-            <p>Max shear: {result.governing.max_shear.value.toFixed(1)} N (x={result.governing.max_shear.x.toFixed(2)} m)</p>
-            <p>Max moment: {result.governing.max_moment.value.toFixed(1)} N.m (x={result.governing.max_moment.x.toFixed(2)} m)</p>
-            <p>Max von Mises: {(result.governing.max_von_mises.value / 1e6).toFixed(2)} MPa (x={result.governing.max_von_mises.x.toFixed(2)} m)</p>
-            <p>Max Shear Stress: {(result.governing.max_shear_stress.value / 1e6).toFixed(2)} MPa (x={result.governing.max_shear_stress.y.toFixed(2)} m)</p>
-            <p>Max deflection: {(result.governing.max_deflection.value * 1000).toFixed(2)} mm (x={result.governing.max_deflection.x.toFixed(2)} m)</p>
+            <p>
+              R_a = {result.reactions.a.toFixed(1)} {units.force}, R_b = {result.reactions.b.toFixed(1)} {units.force}
+            </p>
+            <p>
+              Max shear: {result.governing.max_shear.value.toFixed(1)} {units.force} (x=
+              {result.governing.max_shear.x.toFixed(2)} {units.length})
+            </p>
+            <p>
+              Max moment: {result.governing.max_moment.value.toFixed(1)} {units.moment} (x=
+              {result.governing.max_moment.x.toFixed(2)} {units.length})
+            </p>
+            <p>
+              Max von Mises: {(result.governing.max_von_mises.value / 1e6).toFixed(2)} MPa (x=
+              {result.governing.max_von_mises.x.toFixed(2)} {units.length})
+            </p>
+            <p>
+              Max Shear Stress: {(result.governing.max_shear_stress.value / 1e6).toFixed(2)} MPa (at y=
+              {(result.governing.max_shear_stress.y * 1000).toFixed(2)} mm from neutral axis -- section-internal, always SI)
+            </p>
+            <p>
+              Max deflection: {result.governing.max_deflection.value.toFixed(2)} {units.deflection} (x=
+              {result.governing.max_deflection.x.toFixed(2)} {units.length})
+            </p>
           </div>
         </div>
       )}

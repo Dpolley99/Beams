@@ -20,12 +20,14 @@ export function PointLoadArrow({
   beamTopY,
   heightPx,
   color,
+  unit = 'N',
 }: {
   x: number
   magnitude: number
   beamTopY: number
   heightPx: number
   color: string
+  unit?: string
 }) {
   const yTip = beamTopY - 3
   const headLen = Math.min(8, heightPx)
@@ -37,7 +39,7 @@ export function PointLoadArrow({
       {heightPx > 0 && <line x1={x} y1={yStart} x2={x} y2={yShaftEnd} stroke={color} strokeWidth={2.5} />}
       <polygon points={`${x - 5},${yShaftEnd} ${x + 5},${yShaftEnd} ${x},${yTip}`} fill={color} />
       <text x={x} y={yStart - 6} textAnchor="middle" fontSize={12} fill={color}>
-        {magnitude.toFixed(0)} N
+        {magnitude.toFixed(0)} {unit}
       </text>
     </g>
   )
@@ -51,6 +53,7 @@ interface DistributedLoadArrowsProps {
   maxIntensity: number // the largest |intensity| among ALL distributed loads, for proportional scaling
   beamTopY: number
   color: string
+  unit?: string
 }
 
 // Draws one arrow per sample point along the span, each with its OWN
@@ -66,6 +69,7 @@ export function DistributedLoadArrows({
   maxIntensity,
   beamTopY,
   color,
+  unit = 'N/m',
 }: DistributedLoadArrowsProps) {
   const yTip = beamTopY - 3
   const isVarying = startIntensity !== endIntensity
@@ -102,15 +106,15 @@ export function DistributedLoadArrows({
       {isVarying ? (
         <>
           <text x={xAt(0)} y={yTip - heightAt(0) - 8} textAnchor="middle" fontSize={11} fill={color}>
-            {startIntensity.toFixed(0)} N/m
+            {startIntensity.toFixed(0)} {unit}
           </text>
           <text x={xAt(1)} y={yTip - heightAt(1) - 8} textAnchor="middle" fontSize={11} fill={color}>
-            {endIntensity.toFixed(0)} N/m
+            {endIntensity.toFixed(0)} {unit}
           </text>
         </>
       ) : (
         <text x={(xAt(0) + xAt(1)) / 2} y={yTip - heightAt(0.5) - 8} textAnchor="middle" fontSize={12} fill={color}>
-          {startIntensity.toFixed(0)} N/m
+          {startIntensity.toFixed(0)} {unit}
         </text>
       )}
     </g>
@@ -122,9 +126,10 @@ interface SupportProps {
   beamBottomY: number
   type: 'pinned' | 'roller'
   reaction?: number // omit while nothing's been solved yet
+  unit?: string
 }
 
-export function Support({ x, beamBottomY, type, reaction }: SupportProps) {
+export function Support({ x, beamBottomY, type, reaction, unit = 'N' }: SupportProps) {
   const triWidth = 26
   const triHeight = 20
 
@@ -161,7 +166,7 @@ export function Support({ x, beamBottomY, type, reaction }: SupportProps) {
             )
           })}
           <text x={x} y={beamBottomY + triHeight + 26} textAnchor="middle" fontSize={12}>
-            {reaction !== undefined ? `R = ${reaction.toFixed(0)} N` : 'Fixed'}
+            {reaction !== undefined ? `R = ${reaction.toFixed(0)} ${unit}` : 'Fixed'}
           </text>
         </>
       ) : (
@@ -177,7 +182,7 @@ export function Support({ x, beamBottomY, type, reaction }: SupportProps) {
             strokeWidth={1.5}
           />
           <text x={x} y={beamBottomY + triHeight + 33} textAnchor="middle" fontSize={12}>
-            {reaction !== undefined ? `R = ${reaction.toFixed(0)} N` : 'Roller'}
+            {reaction !== undefined ? `R = ${reaction.toFixed(0)} ${unit}` : 'Roller'}
           </text>
         </>
       )}

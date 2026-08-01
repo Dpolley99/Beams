@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import type { FormEvent } from 'react'
-import type { BeamRequest, BeamResult } from '../types'
+import type { BeamRequest, BeamResult, Units } from '../types'
 import { solveBeam } from '../api'
 import { SECTION_LABELS, SECTION_FIELDS, defaultParamsFor } from '../sectionTypes'
 import CrossSectionPreview from './CrossSectionPreview'
@@ -25,6 +25,29 @@ interface DistributedLoadEntry {
   isVarying: boolean // false = plain UDL (start/end intensity always kept equal), true = varying/trapezoidal
 }
 
+// Frontend default units match the EXISTING default numeric values
+// (length defaults of 16/2/10 are meters, load defaults of 1000N/
+// 100N-per-m are N and N/m, etc.) so introducing this feature doesn't
+// silently reinterpret any default value -- deflection is the one
+// exception, since it's output-only (no input field uses it), so
+// defaulting it to 'mm' for nicer readability doesn't affect any
+// typed-in number.
+//
+// NOTE: switching a unit dropdown does NOT convert whatever's already
+// typed in the affected fields -- e.g. a section width of "0.1" typed
+// while section_length='m' stays "0.1" if you switch to 'mm', which
+// now means something 1000x smaller. This is a deliberate scope
+// decision (live re-conversion of in-progress input is a much bigger
+// feature), not a bug -- worth re-entering values after changing a unit.
+const DEFAULT_UNITS: Units = {
+  length: 'm',
+  section_length: 'm',
+  force: 'N',
+  intensity: 'N/m',
+  moment: 'N.m',
+  deflection: 'mm',
+}
+
 // Loads start EMPTY -- the user builds up the load case by adding
 // point loads and distributed loads one at a time, removing any of
 // them freely. A distributed load's UDL/Varying toggle keeps
@@ -44,10 +67,17 @@ export default function BeamForm({ onSolved }: Props) {
   const [sectionType, setSectionType] = useState('rectangle')
   const [sectionParams, setSectionParams] = useState<Record<string, number>>(defaultParamsFor('rectangle'))
 
-  const [youngsModulus, setYoungsModulus] = useState(200e9)
+  // E is ALWAYS GPa -- e.g. 200 for steel, not 200e9 (raw Pascals).
+  const [youngsModulus, setYoungsModulus] = useState(200)
+
+  const [units, setUnits] = useState<Units>(DEFAULT_UNITS)
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  function updateUnit<K extends keyof Units>(key: K, value: Units[K]) {
+    setUnits((prev) => ({ ...prev, [key]: value }))
+  }
 
   function handleSectionTypeChange(newType: string) {
     setSectionType(newType)
@@ -128,6 +158,7 @@ export default function BeamForm({ onSolved }: Props) {
       section_type: sectionType,
       section_params: sectionParams,
       E: youngsModulus,
+      units,
     }
 
     try {
@@ -145,9 +176,9 @@ export default function BeamForm({ onSolved }: Props) {
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <fieldset className="space-y-3">
           <legend className="font-semibold text-gray-800">Beam setup</legend>
-          <NumberField label="Length (m)" value={length} onChange={setLength} />
-          <NumberField label="Support A position (m, fixed)" value={supportA} onChange={setSupportA} />
-          <NumberField label="Support B position (m, roller)" value={supportB} onChange={setSupportB} />
+          <NumberField label={`Length (${units.length})`} value={length} onChange={setLength} />
+          <NumberField label={`Support A position (${units.length}, fixed)`} value={supportA} onChange={setSupportA} />
+          <NumberField label={`Support B position (${units.length}, roller)`} value={supportB} onChange={setSupportB} />
         </fieldset>
 
         <fieldset className="space-y-3">
@@ -160,8 +191,16 @@ export default function BeamForm({ onSolved }: Props) {
                   Remove
                 </button>
               </div>
-              <NumberField label="Magnitude (N)" value={pl.magnitude} onChange={(v) => updatePointLoad(pl.id, { magnitude: v })} />
-              <NumberField label="Position (m)" value={pl.position} onChange={(v) => updatePointLoad(pl.id, { position: v })} />
+              <NumberField
+                label={`Magnitude (${units.force})`}
+                value={pl.magnitude}
+                onChange={(v) => updatePointLoad(pl.id, { magnitude: v })}
+              />
+              <NumberField
+                label={`Position (${units.length})`}
+                value={pl.position}
+                onChange={(v) => updatePointLoad(pl.id, { position: v })}
+              />
             </div>
           ))}
           <button
@@ -183,8 +222,8 @@ export default function BeamForm({ onSolved }: Props) {
                   Remove
                 </button>
               </div>
-              <NumberField label="Start (m)" value={dl.start} onChange={(v) => updateDistributedLoad(dl.id, { start: v })} />
-              <NumberField label="End (m)" value={dl.end} onChange={(v) => updateDistributedLoad(dl.id, { end: v })} />
+              <NumberField label={`Start (${units.length})`} value={dl.start} onChange={(v) => updateDistributedLoad(dl.id, { start: v })} />
+              <NumberField label={`End (${units.length})`} value={dl.end} onChange={(v) => updateDistributedLoad(dl.id, { end: v })} />
               <label className="flex items-center gap-2 text-xs text-gray-600">
                 <input type="checkbox" checked={dl.isVarying} onChange={() => toggleVarying(dl.id)} />
                 Varying (start/end intensity differ)
@@ -192,18 +231,22 @@ export default function BeamForm({ onSolved }: Props) {
               {dl.isVarying ? (
                 <>
                   <NumberField
-                    label="Start intensity (N/m)"
+                    label={`Start intensity (${units.intensity})`}
                     value={dl.startIntensity}
                     onChange={(v) => updateDistributedLoad(dl.id, { startIntensity: v })}
                   />
                   <NumberField
-                    label="End intensity (N/m)"
+                    label={`End intensity (${units.intensity})`}
                     value={dl.endIntensity}
                     onChange={(v) => updateDistributedLoad(dl.id, { endIntensity: v })}
                   />
                 </>
               ) : (
-                <NumberField label="Intensity (N/m)" value={dl.startIntensity} onChange={(v) => updateUniformIntensity(dl.id, v)} />
+                <NumberField
+                  label={`Intensity (${units.intensity})`}
+                  value={dl.startIntensity}
+                  onChange={(v) => updateUniformIntensity(dl.id, v)}
+                />
               )}
             </div>
           ))}
@@ -236,7 +279,7 @@ export default function BeamForm({ onSolved }: Props) {
           {SECTION_FIELDS[sectionType].map((field) => (
             <NumberField
               key={field.key}
-              label={field.label}
+              label={`${field.label} (${units.section_length})`}
               value={sectionParams[field.key] ?? field.default}
               onChange={(v) => updateSectionParam(field.key, v)}
               step={0.001}
@@ -246,7 +289,40 @@ export default function BeamForm({ onSolved }: Props) {
 
         <fieldset className="space-y-3">
           <legend className="font-semibold text-gray-800">Material</legend>
-          <NumberField label="Young's modulus E (Pa)" value={youngsModulus} onChange={setYoungsModulus} />
+          <NumberField label="Young's modulus E (GPa)" value={youngsModulus} onChange={setYoungsModulus} />
+        </fieldset>
+
+        <fieldset className="space-y-3 xl:col-span-2">
+          <legend className="font-semibold text-gray-800">Units</legend>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <SelectField label="Length" value={units.length} onChange={(v) => updateUnit('length', v as Units['length'])} options={['m', 'mm']} />
+            <SelectField
+              label="Section dimensions"
+              value={units.section_length}
+              onChange={(v) => updateUnit('section_length', v as Units['section_length'])}
+              options={['m', 'mm']}
+            />
+            <SelectField label="Force" value={units.force} onChange={(v) => updateUnit('force', v as Units['force'])} options={['N', 'kN']} />
+            <SelectField
+              label="Distributed load intensity"
+              value={units.intensity}
+              onChange={(v) => updateUnit('intensity', v as Units['intensity'])}
+              options={['N/m', 'kN/m', 'N/mm', 'kN/mm']}
+            />
+            <SelectField
+              label="Moment (results)"
+              value={units.moment}
+              onChange={(v) => updateUnit('moment', v as Units['moment'])}
+              options={['N.m', 'kN.m', 'N.mm', 'kN.mm']}
+            />
+            <SelectField
+              label="Deflection (results)"
+              value={units.deflection}
+              onChange={(v) => updateUnit('deflection', v as Units['deflection'])}
+              options={['m', 'mm']}
+            />
+          </div>
+          <p className="text-xs text-gray-400">Stress (bending, shear, von Mises) is always shown in MPa.</p>
         </fieldset>
       </div>
 
@@ -265,6 +341,9 @@ export default function BeamForm({ onSolved }: Props) {
             }))}
             sectionType={sectionType}
             sectionParams={sectionParams}
+            forceUnit={units.force}
+            intensityUnit={units.intensity}
+            lengthUnit={units.length}
           />
         </div>
         <div className="shrink-0">
@@ -306,6 +385,35 @@ function NumberField({
         onChange={(e) => onChange(parseFloat(e.target.value))}
         className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-1.5 focus:border-blue-500 focus:outline-none"
       />
+    </label>
+  )
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  options: string[]
+}) {
+  return (
+    <label className="block text-xs">
+      <span className="text-gray-600">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
+      >
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
     </label>
   )
 }
