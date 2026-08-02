@@ -21,6 +21,23 @@ function argMaxAbs(values: number[]): number {
   return values.reduce((best, v, i) => (Math.abs(v) > Math.abs(values[best]) ? i : best), 0)
 }
 
+// ShearStressProfile draws the cross-section silhouette using a SINGLE
+// shared scale between width and height, and the height half of that
+// scale comes from result.section.y_min/y_max -- which the backend
+// ALWAYS returns in SI meters (a deliberate design choice, see
+// solver_service.py). But sectionParams straight off the request are
+// in whatever unit was actually selected (e.g. mm) -- mixing a
+// meters-based scale with mm-based width numbers pushes the shape
+// thousands of pixels outside the canvas, which is exactly why it
+// disappeared. This converts sectionParams to meters first, so both
+// halves of the drawing are in the same unit again.
+const SECTION_LENGTH_TO_M: Record<string, number> = { m: 1, mm: 0.001 }
+
+function sectionParamsToSI(params: Record<string, number>, unit: string): Record<string, number> {
+  const factor = SECTION_LENGTH_TO_M[unit] ?? 1
+  return Object.fromEntries(Object.entries(params).map(([k, v]) => [k, v * factor]))
+}
+
 // Defensive fallback ONLY -- with the backend fix restored, result.units
 // should always be present. Kept as a safety net so a malformed/older
 // response can't crash rendering, not as a substitute for the backend
@@ -77,7 +94,7 @@ export default function Home() {
             <ShearStressProfile
               profile={result.shear_profile}
               sectionType={request.section_type}
-              sectionParams={request.section_params}
+              sectionParams={sectionParamsToSI(request.section_params, units.section_length)}
               section={result.section}
             />
           </div>
